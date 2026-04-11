@@ -637,7 +637,7 @@ function PlannerScreen({ data, onDelete, onSave }) {
   };
 
   const renderBill = p => {
-    const ci = CAT[p.category]||CAT.Other;
+    const ci = { e:'📅', bg:'rgba(56,189,248,.12)', c:'#38bdf8' };
     const due = new Date(p.due_date);
     const daysLeft = Math.ceil((due - now)/864e5);
     const paid = !!paidState[p.id];
@@ -947,12 +947,133 @@ function LogScreen({ data, onDelete }) {
                 e('div',{className:'txname'},tx.note||tx.source||'Transaction'),
                 e('div',{className:'txmeta'},isI?'Income':(tx.category||'Other'))
               ),
-              e('div',{className:'txamt '+(isI?'inc':'exp')},(isI?'+':'-')+fmt(tx.amount)),
-              e('button',{className:'txdel',onClick:()=>onDelete(isI?'income':'expenses',tx.id)},'×')
+              e('div',{className:'txamt '+(isI?'inc':'exp')},(isI?'+':'-')+fmt(tx.amount))
             );
           })
         )
       )
+    )
+  );
+}
+
+// ── MANAGE TRANSACTIONS DRAWER ────────────────────────────────────
+function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll }) {
+  const [tab, setTab] = useState('expenses');
+  const tabs = [
+    { key:'expenses', label:'Expenses', icon:'💸', items: data.expenses||[] },
+    { key:'income',   label:'Income',   icon:'💰', items: data.income||[]   },
+    { key:'planned',  label:'Bills',    icon:'📅', items: data.planned||[]  },
+  ];
+  const active = tabs.find(t=>t.key===tab);
+
+  // SVG trash icon matching the screenshot style
+  const TrashIcon = e('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},
+    e('polyline',{points:'3 6 5 6 21 6'}),
+    e('path',{d:'M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'}),
+    e('path',{d:'M10 11v6'}),
+    e('path',{d:'M14 11v6'}),
+    e('path',{d:'M9 6V4h6v2'})
+  );
+
+  return e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&onClose()},
+    e('div',{className:'drw',style:{paddingBottom:32}},
+      e('div',{className:'hdl'}),
+      // Header
+      e('div',{style:{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}},
+        e('div',null,
+          e('div',{style:{fontSize:28,marginBottom:2}},'🗑️'),
+          e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:22,fontWeight:800,letterSpacing:'-0.5px'}},'Manage'),
+          e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:22,fontWeight:800,letterSpacing:'-0.5px'}},'Transactions')
+        ),
+        e('button',{
+          onClick:onClose,
+          style:{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,
+            background:'var(--s2)',border:'1px solid var(--bdr)',borderRadius:14,
+            padding:'10px 16px',cursor:'pointer',color:'var(--t2)',fontFamily:"'DM Sans',sans-serif",
+            fontSize:13,fontWeight:700,minWidth:72}
+        },'✕',e('span',null,'Close'))
+      ),
+      // Tab bar
+      e('div',{style:{display:'flex',gap:6,background:'var(--s2)',borderRadius:12,padding:4,marginBottom:14}},
+        tabs.map(t=>
+          e('button',{key:t.key,
+            onClick:()=>setTab(t.key),
+            style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,
+              padding:'9px 4px',borderRadius:9,border:'none',cursor:'pointer',
+              background:tab===t.key?'var(--s3)':'transparent',
+              color:tab===t.key?'var(--t1)':'var(--t2)',
+              fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700,transition:'all .15s'}
+          },
+            e('span',{style:{fontSize:16}},t.icon),
+            e('span',null,`${t.label} (${t.items.length})`)
+          )
+        )
+      ),
+      // Record count + Delete All row
+      e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+        background:'rgba(248,113,113,.08)',border:'1px solid rgba(248,113,113,.18)',
+        borderRadius:12,padding:'10px 14px',marginBottom:14}},
+        e('span',{style:{fontSize:13,color:'var(--t2)',fontWeight:500}},
+          active.items.length===0 ? 'No records' : `${active.items.length} record${active.items.length!==1?'s':''}`
+        ),
+        e('button',{
+          onClick:()=>active.items.length>0&&onDeleteSome(tab),
+          style:{background:'rgba(248,113,113,.25)',border:'none',borderRadius:20,
+            padding:'7px 16px',fontSize:13,fontWeight:700,color:'var(--red)',
+            cursor:active.items.length>0?'pointer':'not-allowed',
+            opacity:active.items.length>0?1:.45,fontFamily:"'DM Sans',sans-serif"}
+        },'Delete All')
+      ),
+      // List / empty state
+      active.items.length===0
+        ? e('div',{style:{textAlign:'center',padding:'28px 0'}},
+            e('div',{style:{fontSize:44,marginBottom:10}},'✅'),
+            e('div',{style:{fontSize:14,color:'var(--t2)'}},'No '+active.label.toLowerCase()+' to delete.')
+          )
+        : e('div',{style:{background:'var(--s1)',border:'1px solid var(--bdr)',borderRadius:14,
+            padding:'0 14px',marginBottom:14,maxHeight:260,overflowY:'auto'}},
+            active.items.map((item,i)=>{
+              const label   = item.note||item.source||item.name||'Transaction';
+              const subLabel= tab==='planned'
+                ? 'Due '+ fmtD(item.due_date||item.date)
+                : (tab==='income' ? 'Income' : (item.category||'Other'));
+              const amt  = fmt(item.amount||0);
+              const ci   = tab==='planned' ? {e:'📅',bg:'rgba(56,189,248,.15)'} : (CAT[item.category]||CAT.Other);
+              return e('div',{key:item.id,style:{display:'flex',alignItems:'center',gap:12,
+                padding:'13px 0',borderBottom:i<active.items.length-1?'1px solid var(--bdr)':'none'}},
+                // Icon
+                e('div',{style:{width:44,height:44,borderRadius:13,background:ci.bg,
+                  display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}},ci.e),
+                // Label + meta
+                e('div',{style:{flex:1,minWidth:0}},
+                  e('div',{style:{fontSize:14,fontWeight:600,color:'var(--t1)',
+                    whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},label),
+                  e('div',{style:{fontSize:12,color:'var(--t2)',marginTop:2}},subLabel)
+                ),
+                // Amount
+                e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:15,
+                  color:tab==='income'?'var(--acc)':'var(--red)',flexShrink:0,marginRight:6}},
+                  (tab==='income'?'+':'-')+amt
+                ),
+                // Individual trash button
+                e('button',{
+                  onClick:()=>onDeleteOne(tab, item.id),
+                  style:{background:'none',border:'none',cursor:'pointer',
+                    color:'var(--t3)',padding:6,borderRadius:8,display:'flex',
+                    alignItems:'center',justifyContent:'center',flexShrink:0,
+                    transition:'color .15s'},
+                  onMouseEnter:ev=>ev.currentTarget.style.color='var(--red)',
+                  onMouseLeave:ev=>ev.currentTarget.style.color='var(--t3)'
+                }, TrashIcon)
+              );
+            })
+          ),
+      // Delete ALL Transactions button
+      e('button',{
+        className:'btn btn-red',
+        style:{borderRadius:16,fontSize:15,fontWeight:800,letterSpacing:'.3px',marginTop:4},
+        onClick:onDeleteAll
+      },'Delete ALL Transactions')
     )
   );
 }
@@ -963,10 +1084,16 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
   const [name, setName]     = useState(()=>pref.get('display_name')||'');
   const [editName, setEditName] = useState(false);
   const [pdInput, setPdInput]   = useState('');
-  const [showPin, setShowPin]   = useState(null); // 'set'|'verify'|'change'|'clear-verify'
+  // flow: null | 'manage' | 'pin-gate' | 'pin-set-first' | 'pin-verify' | 'pin-set' | 'pin-change'
+  const [flow, setFlow] = useState(null);
+  const [pendingDeleteTab, setPendingDeleteTab] = useState(null);
+  const [pendingDeleteId,  setPendingDeleteId]  = useState(null);
+  const [hasPin, setHasPin] = useState(()=>!!pref.get('pin'));
   const [photoSrc, setPhotoSrc] = useState(()=>pref.get('photo')||null);
   const fileRef = useRef(null);
-  const avatarRef = useRef(null);
+
+  // Re-check PIN state whenever flow changes (after saving a new PIN)
+  useEffect(()=>{ setHasPin(!!pref.get('pin')); }, [flow]);
 
   const toggleTheme = () => {
     const nt = theme==='dark'?'light':'dark';
@@ -985,11 +1112,9 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
   const handlePhoto = ev => {
     const file=ev.target.files[0]; if (!file) return;
     const reader=new FileReader();
-    reader.onload=e=>{ pref.set('photo',e.target.result); setPhotoSrc(e.target.result); };
+    reader.onload=ev2=>{ pref.set('photo',ev2.target.result); setPhotoSrc(ev2.target.result); };
     reader.readAsDataURL(file);
   };
-
-  const syncRefresh = () => { window.location.reload(); };
 
   const exportData = () => {
     const blob=new Blob([JSON.stringify(db.load(),null,2)],{type:'application/json'});
@@ -998,10 +1123,53 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
     URL.revokeObjectURL(url);
   };
 
-  const hasPin = !!pref.get('pin');
   const totI = data.income.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const totE = data.expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const initials = name ? name[0].toUpperCase() : 'U';
+
+  // Open Manage drawer — always require PIN first
+  const openManage = () => {
+    const pinExists = !!pref.get('pin');
+    setHasPin(pinExists);
+    if (!pinExists) { setFlow('pin-set-first'); }  // no PIN yet → force setup
+    else { setFlow('pin-gate'); }                   // PIN exists → verify first
+  };
+
+  // Called when user taps "Delete All" for a tab inside the drawer
+  const handleDeleteSomeTab = tab => {
+    setPendingDeleteTab(tab); setPendingDeleteId(null);
+    setFlow('pin-verify');
+  };
+
+  // Called when user taps the trash icon on a single item
+  const handleDeleteOne = (tab, id) => {
+    setPendingDeleteTab(tab); setPendingDeleteId(id);
+    setFlow('pin-verify');
+  };
+
+  // Called when user taps "Delete ALL Transactions" big red button
+  const handleDeleteAll = () => {
+    setPendingDeleteTab('all'); setPendingDeleteId(null);
+    setFlow('pin-verify');
+  };
+
+  // After PIN verified — execute the delete
+  const executePendingDelete = () => {
+    if (pendingDeleteTab==='all') {
+      onClearTx();
+      setPendingDeleteTab(null); setPendingDeleteId(null);
+      setFlow(null);
+    } else if (pendingDeleteId) {
+      const updated = (data[pendingDeleteTab]||[]).filter(x=>x.id!==pendingDeleteId);
+      onUpdate({ [pendingDeleteTab]: updated });
+      setPendingDeleteTab(null); setPendingDeleteId(null);
+      setFlow('manage');
+    } else if (pendingDeleteTab) {
+      onUpdate({ [pendingDeleteTab]:[] });
+      setPendingDeleteTab(null); setPendingDeleteId(null);
+      setFlow('manage');
+    }
+  };
 
   return e('div',null,
     // Avatar
@@ -1061,7 +1229,7 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
     // Data & Security
     e('div',{className:'slbl'},'Data & Security'),
     e('div',{className:'card card-sm',style:{marginBottom:12}},
-      e('div',{className:'mi',onClick:()=>setShowPin(hasPin?'clear-verify':'set-clear')},
+      e('div',{className:'mi',onClick:openManage},
         e('div',{className:'mi-ico',style:{background:'rgba(248,113,113,.1)'}},'🗑️'),
         e('div',{className:'mi-info'},
           e('div',{className:'mi-lbl',style:{color:'var(--red)'}},'Clear Transactions'),
@@ -1069,7 +1237,7 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
         ),
         e('span',{className:'mi-arr',style:{color:'var(--red)'}},'›')
       ),
-      e('div',{className:'mi',onClick:()=>setShowPin(hasPin?'change':'set')},
+      e('div',{className:'mi',onClick:()=>{ const p=!!pref.get('pin'); setHasPin(p); setFlow(p?'pin-change':'pin-set'); }},
         e('div',{className:'mi-ico',style:{background:'rgba(251,191,36,.1)'}},'🔑'),
         e('div',{className:'mi-info'},
           e('div',{className:'mi-lbl'},hasPin?'Change PIN':'Set PIN'),
@@ -1078,29 +1246,39 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
         e('span',{className:'mi-arr'},'›')
       ),
     ),
-    // PIN modals
-    showPin==='set' && e(PinModal,{mode:'set',
-      onSuccess:()=>setShowPin(null),
-      onCancel:()=>setShowPin(null)
+    // ── Flows ──
+    // Manage drawer
+    flow==='manage' && e(ManageTxDrawer,{
+      data,
+      onClose:()=>setFlow(null),
+      onDeleteSome:handleDeleteSomeTab,
+      onDeleteOne:handleDeleteOne,
+      onDeleteAll:handleDeleteAll
     }),
-    showPin==='change' && e(PinModal,{mode:'change',
-      onSuccess:()=>setShowPin(null),
-      onCancel:()=>setShowPin(null)
+    // Gate: verify PIN before opening manage drawer
+    flow==='pin-gate' && e(PinModal,{mode:'verify',
+      onSuccess:()=>setFlow('manage'),
+      onCancel:()=>setFlow(null)
     }),
-    (showPin==='clear-verify'||showPin==='set-clear') && e('div',{className:'ov-center'},
-      e('div',{className:'modal'},
-        e('div',{className:'modal-title'},'⚠️ Clear Transactions'),
-        e('div',{className:'modal-desc'},'This will permanently delete ALL your transactions, planned bills, and goals. This cannot be undone.'),
-        e('button',{className:'btn btn-red',style:{marginBottom:8},onClick:()=>{
-          if (hasPin && showPin==='clear-verify') { setShowPin('clear-pin-check'); return; }
-          onClearTx(); setShowPin(null);
-        }},hasPin&&showPin==='clear-verify'?'Continue (PIN required)':'Yes, Delete Everything'),
-        e('button',{className:'btn btn-ghost',onClick:()=>setShowPin(null)},'Cancel')
-      )
-    ),
-    showPin==='clear-pin-check' && e(PinModal,{mode:'verify',
-      onSuccess:()=>{ onClearTx(); setShowPin(null); },
-      onCancel:()=>setShowPin(null)
+    // Force PIN setup before accessing manage (no PIN yet)
+    flow==='pin-set-first' && e(PinModal,{mode:'set',
+      onSuccess:()=>{ setHasPin(true); setFlow('manage'); },
+      onCancel:()=>setFlow(null)
+    }),
+    // PIN verify before deleting
+    flow==='pin-verify' && e(PinModal,{mode:'verify',
+      onSuccess:()=>executePendingDelete(),
+      onCancel:()=>{ setPendingDeleteTab(null); setPendingDeleteId(null); setFlow('manage'); }
+    }),
+    // PIN set from menu (no existing PIN)
+    flow==='pin-set' && e(PinModal,{mode:'set',
+      onSuccess:()=>{ setHasPin(true); setFlow(null); },
+      onCancel:()=>setFlow(null)
+    }),
+    // PIN change from menu (has existing PIN)
+    flow==='pin-change' && e(PinModal,{mode:'change',
+      onSuccess:()=>setFlow(null),
+      onCancel:()=>setFlow(null)
     })
   );
 }
