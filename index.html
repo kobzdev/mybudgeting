@@ -257,6 +257,8 @@ const CAT = {
   Savings:       { e:'💰', bg:'rgba(110,231,183,.12)',  c:'#6ee7b7' },
   Other:         { e:'📦', bg:'rgba(148,163,184,.12)',  c:'#94a3b8' }
 };
+
+
 const CATS = Object.keys(CAT);
 const GOAL_ICONS   = ['🏠','✈️','🚗','📱','💍','🎓','🏋️','🌍','💻','🛋️','🎸','🐶'];
 const GOAL_COLORS  = ['#6ee7b7','#38bdf8','#f472b6','#fbbf24','#a78bfa','#f87171'];
@@ -417,7 +419,7 @@ function AddDrawer({ onClose, onSave }) {
     const base = { id:uid(), amount:amt, created_at:new Date().toISOString() };
     if (type==='expense')  onSave('expenses', {...base, note:notes, category:cat, date});
     if (type==='income')   onSave('income',   {...base, source:notes, date});
-    if (type==='planned')  onSave('planned',  {...base, name:planName.trim(), category:cat, due_date:dueDate, recurring});
+    if (type==='planned')  onSave('planned',  {...base, name:planName.trim(), due_date:dueDate, recurring});
     onClose();
   };
 
@@ -583,50 +585,216 @@ function HomeScreen({ data }) {
 }
 
 // ── PLANNER SCREEN ────────────────────────────────────────────────
-function PlannerScreen({ data, onDelete }) {
-  const { planned } = data;
+function PlannerScreen({ data, onDelete, onSave }) {
+  const { planned, expenses } = data;
   const now = new Date();
-  const sorted = [...planned].sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
-  const upcoming = sorted.filter(p=>new Date(p.due_date)>=now);
-  const past     = sorted.filter(p=>new Date(p.due_date)<now);
+
+  // Month view state: 'current' or 'browse'
+  const [viewMode, setViewMode] = useState('current');
+  const [browseYear,  setBrowseYear]  = useState(now.getFullYear());
+  const [browseMonth, setBrowseMonth] = useState(now.getMonth()); // 0-indexed
+
+  const selYear  = viewMode==='current' ? now.getFullYear() : browseYear;
+  const selMonth = viewMode==='current' ? now.getMonth()    : browseMonth;
+
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  // Bills for selected month (match due_date month/year)
+  const monthBills = planned.filter(p => {
+    const d = new Date(p.due_date);
+    return d.getFullYear()===selYear && d.getMonth()===selMonth;
+  }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
+
+  // Paid tracking stored in localStorage keyed by bill id + month key
+  const paidKey = id => `paid_${id}_${selYear}_${selMonth}`;
+  const isPaid = id => { try { return localStorage.getItem(paidKey(id))==='1'; } catch{return false;} };
+  const [paidState, setPaidState] = useState(()=>{
+    const s={};
+    planned.forEach(p=>{ s[p.id]=isPaid(p.id); });
+    return s;
+  });
+
+  // Re-sync paid state when month changes
+  useEffect(()=>{
+    const s={};
+    planned.forEach(p=>{ s[p.id]=isPaid(p.id); });
+    setPaidState(s);
+  },[selYear, selMonth, planned]);
+
+  const handlePay = p => {
+    if (paidState[p.id]) return; // already paid
+    try { localStorage.setItem(paidKey(p.id),'1'); } catch{}
+    setPaidState(prev=>({...prev,[p.id]:true}));
+    // Add to expenses
+    onSave('expenses', {
+      id: uid(),
+      amount: p.amount,
+      note: p.name,
+      category: p.category||'Bills',
+      date: today(),
+      created_at: new Date().toISOString()
+    });
+  };
 
   const renderBill = p => {
     const ci = CAT[p.category]||CAT.Other;
-    const daysLeft = Math.ceil((new Date(p.due_date)-now)/864e5);
-    const urgent = daysLeft>=0&&daysLeft<=7;
-    return e('div',{key:p.id,className:'bill-card'},
-      e('div',{className:'txi',style:{background:ci.bg,width:42,height:42,borderRadius:13,display:'flex',alignItems:'center',justifyContent:'center',fontSize:19,flexShrink:0}},ci.e),
+    const due = new Date(p.due_date);
+    const daysLeft = Math.ceil((due - now)/864e5);
+    const paid = !!paidState[p.id];
+
+    return e('div',{key:p.id,style:{
+      display:'flex',alignItems:'center',gap:12,padding:'14px 0',
+      borderBottom:'1px solid var(--bdr)'
+    }},
+      // Icon
+      e('div',{style:{
+        width:46,height:46,borderRadius:14,background:ci.bg,
+        display:'flex',alignItems:'center',justifyContent:'center',
+        fontSize:21,flexShrink:0
+      }},ci.e),
+      // Info
       e('div',{style:{flex:1,minWidth:0}},
-        e('div',{className:'txname'},p.name),
-        e('div',{className:'txmeta'},`Due ${fmtF(p.due_date)}${p.recurring?' · Recurring':''}`)
+        e('div',{style:{fontSize:14,fontWeight:600,color:'var(--t1)'}},p.name),
+        e('div',{style:{fontSize:12,color:'var(--t2)',marginTop:2}},
+          fmtD(p.due_date) + (daysLeft>0?` · ${daysLeft}d left`:daysLeft===0?' · Today':' · Past due') +
+          (p.recurring?' · 🔁':'')
+        )
       ),
-      e('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}},
-        e('div',{className:'txamt pln'},fmt(p.amount)),
-        urgent&&daysLeft>=0&&e('span',{className:'bdg bdg-red'},daysLeft===0?'Today':`${daysLeft}d`)
+      // Amount + days badge
+      e('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,marginRight:8}},
+        e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:15,color:paid?'var(--acc)':'var(--acc4)'}},fmt(p.amount)),
+        !paid && daysLeft>=0 && daysLeft<=30 && e('span',{style:{
+          background:'rgba(56,189,248,.15)',color:'var(--acc2)',
+          borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700
+        }},`${daysLeft}D`)
       ),
-      e('button',{className:'txdel',onClick:()=>onDelete('planned',p.id)},'×')
+      // Paid button
+      e('button',{
+        onClick:()=>!paid&&handlePay(p),
+        style:{
+          background: paid ? 'var(--acc)' : 'var(--s3)',
+          color: paid ? '#0a0f1e' : 'var(--t2)',
+          border: 'none',
+          borderRadius:20,
+          padding:'8px 14px',
+          fontSize:13,
+          fontWeight:700,
+          cursor: paid?'default':'pointer',
+          flexShrink:0,
+          transition:'all .2s',
+          fontFamily:"'DM Sans',sans-serif",
+          opacity: paid?1:1
+        }
+      }, paid ? '✓ Paid' : 'Mark Paid')
     );
   };
 
-  const totalPlanned = planned.reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  const totalBills  = monthBills.length;
+  const totalAmount = monthBills.reduce((s,p)=>s+parseFloat(p.amount||0),0);
 
   return e('div',null,
-    e('div',{className:'ph'},e('div',{className:'ptitle'},'Planner')),
-    e('div',{className:'card card-sm',style:{marginBottom:12}},
-      e('div',{style:{fontSize:12,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px',fontWeight:700,fontSize:10}},'Total Planned'),
-      e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:26,fontWeight:700,color:'var(--acc4)'}},fmt(totalPlanned))
+    // Header row
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
+      e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:28,fontWeight:800,letterSpacing:'-1px'}},'Planner'),
+      totalBills>0 && e('div',{style:{
+        background:'var(--s2)',border:'1px solid var(--bdr)',
+        borderRadius:20,padding:'5px 14px',
+        fontSize:12,fontWeight:700,color:'var(--acc2)',
+        textTransform:'uppercase',letterSpacing:'.6px'
+      }},`${totalBills} BILLS`)
     ),
-    upcoming.length>0 && e('div',null,
-      e('div',{className:'slbl'},'Upcoming'),
-      e('div',{className:'card card-sm'},upcoming.map(renderBill))
+
+    // Month toggle
+    e('div',{style:{
+      display:'flex',gap:6,background:'var(--s2)',
+      borderRadius:14,padding:5,marginBottom:16
+    }},
+      e('button',{
+        onClick:()=>setViewMode('current'),
+        style:{
+          flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+          padding:'10px 12px',borderRadius:10,border:'none',cursor:'pointer',
+          background:viewMode==='current'?'var(--s3)':'transparent',
+          color:viewMode==='current'?'var(--t1)':'var(--t2)',
+          fontWeight:600,fontSize:13,fontFamily:"'DM Sans',sans-serif",
+          transition:'all .15s'
+        }
+      },
+        e('span',{style:{fontSize:18}},'📅'),
+        e('span',null,'This Month')
+      ),
+      e('button',{
+        onClick:()=>setViewMode('browse'),
+        style:{
+          flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+          padding:'10px 12px',borderRadius:10,border:'none',cursor:'pointer',
+          background:viewMode==='browse'?'var(--s3)':'transparent',
+          color:viewMode==='browse'?'var(--t1)':'var(--t2)',
+          fontWeight:600,fontSize:13,fontFamily:"'DM Sans',sans-serif",
+          transition:'all .15s'
+        }
+      },
+        e('span',{style:{fontSize:18}},'🗓️'),
+        e('span',null,'Browse Months')
+      )
     ),
-    past.length>0 && e('div',null,
-      e('div',{className:'slbl',style:{color:'var(--t3)'}},'Past Due'),
-      e('div',{className:'card card-sm'},past.map(renderBill))
+
+    // Browse month navigator
+    viewMode==='browse' && e('div',{style:{
+      display:'flex',alignItems:'center',justifyContent:'space-between',
+      background:'var(--s1)',border:'1px solid var(--bdr)',
+      borderRadius:12,padding:'10px 14px',marginBottom:14
+    }},
+      e('button',{
+        onClick:()=>{
+          if (browseMonth===0){setBrowseMonth(11);setBrowseYear(y=>y-1);}
+          else setBrowseMonth(m=>m-1);
+        },
+        style:{background:'none',border:'none',color:'var(--t2)',fontSize:20,cursor:'pointer',padding:'0 4px'}
+      },'‹'),
+      e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:15}},
+        MONTHS[browseMonth]+' '+browseYear
+      ),
+      e('button',{
+        onClick:()=>{
+          if (browseMonth===11){setBrowseMonth(0);setBrowseYear(y=>y+1);}
+          else setBrowseMonth(m=>m+1);
+        },
+        style:{background:'none',border:'none',color:'var(--t2)',fontSize:20,cursor:'pointer',padding:'0 4px'}
+      },'›')
     ),
-    planned.length===0 && e('div',{className:'empty'},
-      e('div',{className:'eico'},'📋'),
-      e('div',{className:'etxt'},'No planned bills yet.\nTap + to add rent, subscriptions, and utilities.')
+
+    // Bills section header
+    monthBills.length>0 && e('div',{style:{
+      fontSize:10,fontWeight:700,textTransform:'uppercase',
+      letterSpacing:'.8px',color:'var(--t3)',marginBottom:8,padding:'0 2px'
+    }},`BILLS FOR ${MONTHS[selMonth].toUpperCase()} ${selYear}`),
+
+    // Bills list
+    monthBills.length>0
+      ? e('div',{style:{
+          background:'var(--s1)',border:'1px solid var(--bdr)',
+          borderRadius:16,padding:'0 14px',marginBottom:12
+        }},
+          monthBills.map((p,i)=>e('div',{key:p.id,style:{borderBottom:i<monthBills.length-1?'1px solid var(--bdr)':'none'}},renderBill(p)))
+        )
+      : e('div',{className:'empty'},
+          e('div',{className:'eico'},'📋'),
+          e('div',{className:'etxt'},
+            viewMode==='current'
+              ? 'No bills this month.\nTap + to add rent, subscriptions, and utilities.'
+              : `No bills for ${MONTHS[selMonth]} ${selYear}.`
+          )
+        ),
+
+    // Summary strip
+    monthBills.length>0 && e('div',{style:{
+      background:'var(--s2)',border:'1px solid var(--bdr)',
+      borderRadius:12,padding:'12px 16px',
+      display:'flex',justifyContent:'space-between',alignItems:'center'
+    }},
+      e('div',{style:{fontSize:12,color:'var(--t2)',fontWeight:600}},`${monthBills.filter(p=>paidState[p.id]).length} of ${totalBills} paid`),
+      e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:15,color:'var(--acc4)'}},fmt(totalAmount))
     )
   );
 }
@@ -997,7 +1165,7 @@ function App() {
 
   const pages = {
     home:    e(HomeScreen,    {data}),
-    planner: e(PlannerScreen, {data, onDelete:handleDelete}),
+    planner: e(PlannerScreen, {data, onDelete:handleDelete, onSave:handleSave}),
     goals:   e(GoalsScreen,   {data, onAddGoal:g=>handleSave('goals',g), onDelete:handleDelete, onContribute:handleContrib}),
     log:     e(LogScreen,     {data, onDelete:handleDelete}),
     profile: e(ProfileScreen, {data, onUpdate:handleUpdate, onClearTx:handleClearTx, onSignOut:()=>setShowSignOut(true)})
