@@ -386,7 +386,7 @@ function SetupScreen({ onDone }) {
     e('div',{className:'setup-tag'},'Your money, beautifully managed.'),
     e('div',{className:'setup-card'},
       e('div',{className:'fg'},
-        e('label',{className:'lbl'},'Your name (optional)'),
+        e('label',{className:'lbl'},'Your name'),
         e('input',{className:'inp',type:'text',placeholder:'e.g. Kobi',value:name,onChange:ev=>setName(ev.target.value),onKeyDown:ev=>ev.key==='Enter'&&onDone(name.trim()),autoFocus:true})
       ),
       e('button',{className:'btn',onClick:()=>onDone(name.trim())},'Get Started →'),
@@ -442,7 +442,7 @@ function AddDrawer({ onClose, onSave }) {
         e('label',{className:'lbl'},'Bill Name'),
         e('input',{className:'inp',type:'text',placeholder:'e.g. Globe Postpaid',value:planName,onChange:ev=>setPlanName(ev.target.value)})
       ),
-      (type==='expense'||type==='planned') && e('div',{className:'fg'},
+      (type==='expense') && e('div',{className:'fg'},
         e('label',{className:'lbl'},'Category'),
         e('div',{className:'chips'},
           CATS.map(c=>e('div',{key:c,className:'chip '+(cat===c?'on':''),onClick:()=>setCat(c)}, CAT[c].e+' '+c))
@@ -851,7 +851,6 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
           e('button',{className:'btn btn-sm',style:{width:'auto'},onClick:()=>{ pref.set('display_name',name); setEditName(false); }},'✓')
         )
       : e('div',{className:'pname',onClick:()=>setEditName(true)},name||'Your Name',' ✏️'),
-    e('div',{className:'pemail'},name?`${name.toLowerCase().replace(/\s/g,'.')}@mybudget.app`:'mybudget • offline mode'),
     // Income / Spent summary
     e('div',{className:'prof-stats'},
       e('div',{className:'prof-stat'},
@@ -894,11 +893,6 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
     // Data & Security
     e('div',{className:'slbl'},'Data & Security'),
     e('div',{className:'card card-sm',style:{marginBottom:12}},
-      e('div',{className:'mi',onClick:syncRefresh},
-        e('div',{className:'mi-ico',style:{background:'rgba(56,189,248,.1)'}},'🔄'),
-        e('div',{className:'mi-info'},e('div',{className:'mi-lbl'},'Sync & Refresh')),
-        e('span',{className:'mi-arr'},'›')
-      ),
       e('div',{className:'mi',onClick:()=>setShowPin(hasPin?'clear-verify':'set-clear')},
         e('div',{className:'mi-ico',style:{background:'rgba(248,113,113,.1)'}},'🗑️'),
         e('div',{className:'mi-info'},
@@ -915,19 +909,6 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
         ),
         e('span',{className:'mi-arr'},'›')
       ),
-      e('div',{className:'mi',onClick:exportData},
-        e('div',{className:'mi-ico',style:{background:'rgba(110,231,183,.1)'}},'⬇️'),
-        e('div',{className:'mi-info'},
-          e('div',{className:'mi-lbl'},'Export Backup'),
-          e('div',{className:'mi-sub'},'Download JSON backup of all your data')
-        ),
-        e('span',{className:'mi-arr'},'›')
-      ),
-      e('div',{className:'mi',onClick:onSignOut},
-        e('div',{className:'mi-ico',style:{background:'rgba(248,113,113,.08)'}},'🚪'),
-        e('div',{className:'mi-info'},e('div',{className:'mi-lbl',style:{color:'var(--red)'}},'Sign Out')),
-        e('span',{className:'mi-arr',style:{color:'var(--red)'}},'›')
-      )
     ),
     // PIN modals
     showPin==='set' && e(PinModal,{mode:'set',
