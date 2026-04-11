@@ -589,24 +589,23 @@ function PlannerScreen({ data, onDelete, onSave }) {
   const { planned, expenses } = data;
   const now = new Date();
 
-  // Month view state: 'current' or 'browse'
   const [viewMode, setViewMode] = useState('current');
-  const [browseYear,  setBrowseYear]  = useState(now.getFullYear());
-  const [browseMonth, setBrowseMonth] = useState(now.getMonth()); // 0-indexed
+  const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
 
-  const selYear  = viewMode==='current' ? now.getFullYear() : browseYear;
-  const selMonth = viewMode==='current' ? now.getMonth()    : browseMonth;
+  const [sY, sM] = viewMode==='range'
+    ? [parseInt(rangeMonth.split('-')[0]), parseInt(rangeMonth.split('-')[1])-1]
+    : [now.getFullYear(), now.getMonth()];
 
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-  // Bills for selected month (match due_date month/year)
+  // Bills for selected month
   const monthBills = planned.filter(p => {
     const d = new Date(p.due_date);
-    return d.getFullYear()===selYear && d.getMonth()===selMonth;
+    return d.getFullYear()===sY && d.getMonth()===sM;
   }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
 
-  // Paid tracking stored in localStorage keyed by bill id + month key
-  const paidKey = id => `paid_${id}_${selYear}_${selMonth}`;
+  // Paid tracking
+  const paidKey = id => `paid_${id}_${sY}_${sM}`;
   const isPaid = id => { try { return localStorage.getItem(paidKey(id))==='1'; } catch{return false;} };
   const [paidState, setPaidState] = useState(()=>{
     const s={};
@@ -614,18 +613,16 @@ function PlannerScreen({ data, onDelete, onSave }) {
     return s;
   });
 
-  // Re-sync paid state when month changes
   useEffect(()=>{
     const s={};
     planned.forEach(p=>{ s[p.id]=isPaid(p.id); });
     setPaidState(s);
-  },[selYear, selMonth, planned]);
+  },[sY, sM, planned]);
 
   const handlePay = p => {
-    if (paidState[p.id]) return; // already paid
+    if (paidState[p.id]) return;
     try { localStorage.setItem(paidKey(p.id),'1'); } catch{}
     setPaidState(prev=>({...prev,[p.id]:true}));
-    // Add to expenses
     onSave('expenses', {
       id: uid(),
       amount: p.amount,
@@ -646,13 +643,8 @@ function PlannerScreen({ data, onDelete, onSave }) {
       display:'flex',alignItems:'center',gap:12,padding:'14px 0',
       borderBottom:'1px solid var(--bdr)'
     }},
-      // Icon
-      e('div',{style:{
-        width:46,height:46,borderRadius:14,background:ci.bg,
-        display:'flex',alignItems:'center',justifyContent:'center',
-        fontSize:21,flexShrink:0
-      }},ci.e),
-      // Info
+      e('div',{style:{width:46,height:46,borderRadius:14,background:ci.bg,
+        display:'flex',alignItems:'center',justifyContent:'center',fontSize:21,flexShrink:0}},ci.e),
       e('div',{style:{flex:1,minWidth:0}},
         e('div',{style:{fontSize:14,fontWeight:600,color:'var(--t1)'}},p.name),
         e('div',{style:{fontSize:12,color:'var(--t2)',marginTop:2}},
@@ -660,7 +652,6 @@ function PlannerScreen({ data, onDelete, onSave }) {
           (p.recurring?' · 🔁':'')
         )
       ),
-      // Amount + days badge
       e('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,marginRight:8}},
         e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:15,color:paid?'var(--acc)':'var(--acc4)'}},fmt(p.amount)),
         !paid && daysLeft>=0 && daysLeft<=30 && e('span',{style:{
@@ -668,32 +659,27 @@ function PlannerScreen({ data, onDelete, onSave }) {
           borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700
         }},`${daysLeft}D`)
       ),
-      // Paid button
       e('button',{
         onClick:()=>!paid&&handlePay(p),
         style:{
-          background: paid ? 'var(--acc)' : 'var(--s3)',
-          color: paid ? '#0a0f1e' : 'var(--t2)',
-          border: 'none',
-          borderRadius:20,
-          padding:'8px 14px',
-          fontSize:13,
-          fontWeight:700,
-          cursor: paid?'default':'pointer',
-          flexShrink:0,
-          transition:'all .2s',
-          fontFamily:"'DM Sans',sans-serif",
-          opacity: paid?1:1
+          background:paid?'var(--acc)':'var(--s3)',
+          color:paid?'#0a0f1e':'var(--t2)',
+          border:'none',borderRadius:20,padding:'8px 14px',
+          fontSize:13,fontWeight:700,cursor:paid?'default':'pointer',
+          flexShrink:0,transition:'all .2s',fontFamily:"'DM Sans',sans-serif"
         }
-      }, paid ? '✓ Paid' : 'Mark Paid')
+      }, paid?'✓ Paid':'Mark Paid')
     );
   };
 
   const totalBills  = monthBills.length;
   const totalAmount = monthBills.reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  const monthLabel  = viewMode==='range'
+    ? new Date(sY,sM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})
+    : now.toLocaleDateString('en-US',{month:'long',year:'numeric'});
 
   return e('div',null,
-    // Header row
+    // Header
     e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
       e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:28,fontWeight:800,letterSpacing:'-1px'}},'Planner'),
       totalBills>0 && e('div',{style:{
@@ -704,78 +690,30 @@ function PlannerScreen({ data, onDelete, onSave }) {
       }},`${totalBills} BILLS`)
     ),
 
-    // Month toggle
-    e('div',{style:{
-      display:'flex',gap:6,background:'var(--s2)',
-      borderRadius:14,padding:5,marginBottom:16
-    }},
-      e('button',{
-        onClick:()=>setViewMode('current'),
-        style:{
-          flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-          padding:'10px 12px',borderRadius:10,border:'none',cursor:'pointer',
-          background:viewMode==='current'?'var(--s3)':'transparent',
-          color:viewMode==='current'?'var(--t1)':'var(--t2)',
-          fontWeight:600,fontSize:13,fontFamily:"'DM Sans',sans-serif",
-          transition:'all .15s'
-        }
-      },
-        e('span',{style:{fontSize:18}},'📅'),
-        e('span',null,'This Month')
+    // Month toggle — same as Home
+    e('div',{className:'month-toggle'},
+      e('button',{className:'mt-btn '+(viewMode==='current'?'on':''),onClick:()=>setViewMode('current')},
+        e('span',{className:'mt-btn-ico'},'📅'),'This Month'
       ),
-      e('button',{
-        onClick:()=>setViewMode('browse'),
-        style:{
-          flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-          padding:'10px 12px',borderRadius:10,border:'none',cursor:'pointer',
-          background:viewMode==='browse'?'var(--s3)':'transparent',
-          color:viewMode==='browse'?'var(--t1)':'var(--t2)',
-          fontWeight:600,fontSize:13,fontFamily:"'DM Sans',sans-serif",
-          transition:'all .15s'
-        }
-      },
-        e('span',{style:{fontSize:18}},'🗓️'),
-        e('span',null,'Browse Months')
+      e('button',{className:'mt-btn '+(viewMode==='range'?'on':''),onClick:()=>setViewMode('range')},
+        e('span',{className:'mt-btn-ico'},'📆'),'Browse Months'
       )
     ),
 
-    // Browse month navigator
-    viewMode==='browse' && e('div',{style:{
-      display:'flex',alignItems:'center',justifyContent:'space-between',
-      background:'var(--s1)',border:'1px solid var(--bdr)',
-      borderRadius:12,padding:'10px 14px',marginBottom:14
-    }},
-      e('button',{
-        onClick:()=>{
-          if (browseMonth===0){setBrowseMonth(11);setBrowseYear(y=>y-1);}
-          else setBrowseMonth(m=>m-1);
-        },
-        style:{background:'none',border:'none',color:'var(--t2)',fontSize:20,cursor:'pointer',padding:'0 4px'}
-      },'‹'),
-      e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:15}},
-        MONTHS[browseMonth]+' '+browseYear
-      ),
-      e('button',{
-        onClick:()=>{
-          if (browseMonth===11){setBrowseMonth(0);setBrowseYear(y=>y+1);}
-          else setBrowseMonth(m=>m+1);
-        },
-        style:{background:'none',border:'none',color:'var(--t2)',fontSize:20,cursor:'pointer',padding:'0 4px'}
-      },'›')
+    // Month picker — same as Home
+    viewMode==='range' && e('div',{style:{marginBottom:12}},
+      e('input',{className:'inp',type:'month',value:rangeMonth,onChange:ev=>setRangeMonth(ev.target.value)})
     ),
 
-    // Bills section header
+    // Bills label
     monthBills.length>0 && e('div',{style:{
       fontSize:10,fontWeight:700,textTransform:'uppercase',
       letterSpacing:'.8px',color:'var(--t3)',marginBottom:8,padding:'0 2px'
-    }},`BILLS FOR ${MONTHS[selMonth].toUpperCase()} ${selYear}`),
+    }},`BILLS FOR ${MONTHS[sM].toUpperCase()} ${sY}`),
 
     // Bills list
     monthBills.length>0
-      ? e('div',{style:{
-          background:'var(--s1)',border:'1px solid var(--bdr)',
-          borderRadius:16,padding:'0 14px',marginBottom:12
-        }},
+      ? e('div',{style:{background:'var(--s1)',border:'1px solid var(--bdr)',borderRadius:16,padding:'0 14px',marginBottom:12}},
           monthBills.map((p,i)=>e('div',{key:p.id,style:{borderBottom:i<monthBills.length-1?'1px solid var(--bdr)':'none'}},renderBill(p)))
         )
       : e('div',{className:'empty'},
@@ -783,7 +721,7 @@ function PlannerScreen({ data, onDelete, onSave }) {
           e('div',{className:'etxt'},
             viewMode==='current'
               ? 'No bills this month.\nTap + to add rent, subscriptions, and utilities.'
-              : `No bills for ${MONTHS[selMonth]} ${selYear}.`
+              : `No bills for ${MONTHS[sM]} ${sY}.`
           )
         ),
 
@@ -959,12 +897,20 @@ function LogScreen({ data, onDelete }) {
 // ── MANAGE TRANSACTIONS DRAWER ────────────────────────────────────
 function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll }) {
   const [tab, setTab] = useState('expenses');
+  const [confirm, setConfirm] = useState(null); // { type:'one'|'tab'|'all', tab, id, label }
   const tabs = [
     { key:'expenses', label:'Expenses', icon:'💸', items: data.expenses||[] },
     { key:'income',   label:'Income',   icon:'💰', items: data.income||[]   },
     { key:'planned',  label:'Bills',    icon:'📅', items: data.planned||[]  },
   ];
   const active = tabs.find(t=>t.key===tab);
+
+  const doConfirm = () => {
+    if (confirm.type==='one')  { onDeleteOne(confirm.tab, confirm.id); }
+    if (confirm.type==='tab')  { onDeleteSome(confirm.tab); }
+    if (confirm.type==='all')  { onDeleteAll(); }
+    setConfirm(null);
+  };
 
   // SVG trash icon matching the screenshot style
   const TrashIcon = e('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},
@@ -1017,7 +963,7 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll 
           active.items.length===0 ? 'No records' : `${active.items.length} record${active.items.length!==1?'s':''}`
         ),
         e('button',{
-          onClick:()=>active.items.length>0&&onDeleteSome(tab),
+          onClick:()=>active.items.length>0&&setConfirm({type:'tab',tab,label:`all ${active.label.toLowerCase()}`}),
           style:{background:'rgba(248,113,113,.25)',border:'none',borderRadius:20,
             padding:'7px 16px',fontSize:13,fontWeight:700,color:'var(--red)',
             cursor:active.items.length>0?'pointer':'not-allowed',
@@ -1057,7 +1003,7 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll 
                 ),
                 // Individual trash button
                 e('button',{
-                  onClick:()=>onDeleteOne(tab, item.id),
+                  onClick:()=>setConfirm({type:'one',tab,id:item.id,label}),
                   style:{background:'none',border:'none',cursor:'pointer',
                     color:'var(--t3)',padding:6,borderRadius:8,display:'flex',
                     alignItems:'center',justifyContent:'center',flexShrink:0,
@@ -1068,12 +1014,18 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll 
               );
             })
           ),
-      // Delete ALL Transactions button
-      e('button',{
-        className:'btn btn-red',
-        style:{borderRadius:16,fontSize:15,fontWeight:800,letterSpacing:'.3px',marginTop:4},
-        onClick:onDeleteAll
-      },'Delete ALL Transactions')
+      // ── Confirm modal ──
+      confirm && e('div',{className:'ov-center',style:{zIndex:400}},
+        e('div',{className:'modal'},
+          e('div',{style:{fontSize:36,textAlign:'center',marginBottom:10}},'⚠️'),
+          e('div',{className:'modal-title',style:{textAlign:'center'}},'Are you sure?'),
+          e('div',{className:'modal-desc',style:{textAlign:'center'}},
+            `This will permanently delete ${confirm.label}. This cannot be undone.`
+          ),
+          e('button',{className:'btn btn-red',style:{marginBottom:8},onClick:doConfirm},'Yes, Delete'),
+          e('button',{className:'btn btn-ghost',onClick:()=>setConfirm(null)},'No, Cancel')
+        )
+      )
     )
   );
 }
@@ -1084,10 +1036,8 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
   const [name, setName]     = useState(()=>pref.get('display_name')||'');
   const [editName, setEditName] = useState(false);
   const [pdInput, setPdInput]   = useState('');
-  // flow: null | 'manage' | 'pin-gate' | 'pin-set-first' | 'pin-verify' | 'pin-set' | 'pin-change'
+  // flow: null | 'manage' | 'pin-gate' | 'pin-set-first' | 'pin-set' | 'pin-change'
   const [flow, setFlow] = useState(null);
-  const [pendingDeleteTab, setPendingDeleteTab] = useState(null);
-  const [pendingDeleteId,  setPendingDeleteId]  = useState(null);
   const [hasPin, setHasPin] = useState(()=>!!pref.get('pin'));
   const [photoSrc, setPhotoSrc] = useState(()=>pref.get('photo')||null);
   const fileRef = useRef(null);
@@ -1137,38 +1087,20 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
 
   // Called when user taps "Delete All" for a tab inside the drawer
   const handleDeleteSomeTab = tab => {
-    setPendingDeleteTab(tab); setPendingDeleteId(null);
-    setFlow('pin-verify');
+    const updated = { [tab]: [] };
+    onUpdate(updated);
   };
 
   // Called when user taps the trash icon on a single item
   const handleDeleteOne = (tab, id) => {
-    setPendingDeleteTab(tab); setPendingDeleteId(id);
-    setFlow('pin-verify');
+    const updated = (data[tab]||[]).filter(x=>x.id!==id);
+    onUpdate({ [tab]: updated });
   };
 
   // Called when user taps "Delete ALL Transactions" big red button
   const handleDeleteAll = () => {
-    setPendingDeleteTab('all'); setPendingDeleteId(null);
-    setFlow('pin-verify');
-  };
-
-  // After PIN verified — execute the delete
-  const executePendingDelete = () => {
-    if (pendingDeleteTab==='all') {
-      onClearTx();
-      setPendingDeleteTab(null); setPendingDeleteId(null);
-      setFlow(null);
-    } else if (pendingDeleteId) {
-      const updated = (data[pendingDeleteTab]||[]).filter(x=>x.id!==pendingDeleteId);
-      onUpdate({ [pendingDeleteTab]: updated });
-      setPendingDeleteTab(null); setPendingDeleteId(null);
-      setFlow('manage');
-    } else if (pendingDeleteTab) {
-      onUpdate({ [pendingDeleteTab]:[] });
-      setPendingDeleteTab(null); setPendingDeleteId(null);
-      setFlow('manage');
-    }
+    onClearTx();
+    setFlow(null);
   };
 
   return e('div',null,
@@ -1264,11 +1196,6 @@ function ProfileScreen({ data, onUpdate, onClearTx, onSignOut }) {
     flow==='pin-set-first' && e(PinModal,{mode:'set',
       onSuccess:()=>{ setHasPin(true); setFlow('manage'); },
       onCancel:()=>setFlow(null)
-    }),
-    // PIN verify before deleting
-    flow==='pin-verify' && e(PinModal,{mode:'verify',
-      onSuccess:()=>executePendingDelete(),
-      onCancel:()=>{ setPendingDeleteTab(null); setPendingDeleteId(null); setFlow('manage'); }
     }),
     // PIN set from menu (no existing PIN)
     flow==='pin-set' && e(PinModal,{mode:'set',
