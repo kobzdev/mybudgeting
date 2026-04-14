@@ -3,6 +3,6 @@
       "target": {
         "namespace": "android_app",
         "package_name": "app.vercel.mybudgetingapp.twa",
-        "sha256_cert_fingerprints": ["0B:70:EC:25:6F:E2:BB:3C:BC:12:7B:B6:05:9F:38:7C:E3:ED:21:30:62:F8:3A:39:24:37:96:B1:17:B9:85:E6"]
+        "sha256_cert_fingerprints": ["6A:B5:D5:33:A5:45:F9:C2:CD:43:05:68:69:A2:18:80:9A:EE:1C:5D:1C:DC:D5:88:DB:AE:F5:A3:66:5B:CF:36"]
       }
     }]
