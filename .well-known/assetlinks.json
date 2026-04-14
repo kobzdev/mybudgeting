@@ -1,10 +1,8 @@
-[
-  {
+[{
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
         "package_name": "app.vercel.mybudgetingapp.twa",
-        "sha256_cert_fingerprints": ["41:8F:C5:70:09:F5:15:D6:91:1E:91:D5:6A:F9:10:62:C4:81:B1:0A:1E:0E:E2:76:9E:B2:3E:28:53:E7:CD:E0"]
+        "sha256_cert_fingerprints": ["0B:70:EC:25:6F:E2:BB:3C:BC:12:7B:B6:05:9F:38:7C:E3:ED:21:30:62:F8:3A:39:24:37:96:B1:17:B9:85:E6"]
       }
-    }
-]
+    }]
