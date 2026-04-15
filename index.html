@@ -206,6 +206,20 @@ select.inp{appearance:none}
 .spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(10,15,30,.3);border-top-color:#0a0f1e;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:0;height:0}
+/* DEBT CARDS */
+.debt-section{margin-bottom:12px}
+.debt-card{background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:8px}
+.debt-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.debt-ico{width:42px;height:42px;border-radius:13px;background:rgba(248,113,113,.12);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.debt-info{flex:1;min-width:0}
+.debt-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.debt-sub{font-size:12px;color:var(--t2);margin-top:1px}
+.debt-nums{display:flex;gap:6px;margin-bottom:10px}
+.debt-num{flex:1;background:var(--s2);border-radius:10px;padding:8px 10px;text-align:center}
+.debt-num-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);font-weight:700;margin-bottom:2px}
+.debt-num-val{font-family:'Syne',sans-serif;font-size:13px;font-weight:700}
+.debt-pbar{height:6px;background:var(--s3);border-radius:3px;overflow:hidden;margin-bottom:10px}
+.debt-pfill{height:100%;border-radius:3px;background:var(--red);transition:width .6s ease}
 /* SETUP SCREEN */
 .setup-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;background:radial-gradient(ellipse at 60% 0%,#1a2e4a,#0a0f1e 60%)}
 .setup-logo{font-family:'Syne',sans-serif;font-size:40px;font-weight:800;letter-spacing:-1.5px;margin-bottom:8px}
@@ -231,7 +245,7 @@ const PREF_KEY = 'mybudget_prefs';
 const db = {
   load: () => { try { const r = localStorage.getItem(DB_KEY); return r ? JSON.parse(r) : db.blank(); } catch { return db.blank(); } },
   save: d  => { try { localStorage.setItem(DB_KEY, JSON.stringify(d)); } catch(e) { console.error(e); } },
-  blank: () => ({ income:[], expenses:[], planned:[], goals:[], paydays:[] })
+  blank: () => ({ income:[], expenses:[], planned:[], goals:[], paydays:[], debts:[] })
 };
 const pref = {
   get: k => { try { const r = localStorage.getItem(PREF_KEY); return r ? JSON.parse(r)[k] ?? null : null; } catch { return null; } },
@@ -467,6 +481,350 @@ function AddDrawer({ onClose, onSave }) {
       ),
       e('button',{className:'btn',onClick:save},'Save Transaction')
     )
+  );
+}
+
+// ── DEBT SECTION ─────────────────────────────────────────────────
+function AddDebtDrawer({ onClose, onSave }) {
+  const [debtType, setDebtType]     = useState('debt');  // 'debt' | 'loan'
+  const [debtorName, setDebtorName] = useState('');
+  const [loanedAmt, setLoanedAmt]   = useState('');
+  const [monthlyPay, setMonthlyPay] = useState('');
+  const [durUnit, setDurUnit]       = useState('months');
+  const [durVal, setDurVal]         = useState('');
+  const [err, setErr] = useState('');
+
+  const la = parseFloat(loanedAmt)||0;
+
+  // Both monthly and duration are always visible.
+  // If user fills both: use them as-is and compute implied interest.
+  // If user fills only monthly: derive duration from principal/monthly.
+  // If user fills only duration: derive monthly from principal/duration.
+  const derivedMonths = useMemo(()=>{
+    const dv = parseFloat(durVal);
+    if (dv>0) return durUnit==='years' ? Math.round(dv*12) : Math.round(dv);
+    const mp = parseFloat(monthlyPay);
+    if (la>0&&mp>0&&mp<=la) return Math.ceil(la/mp);
+    return null;
+  }, [monthlyPay, durVal, durUnit, la]);
+
+  const derivedMonthly = useMemo(()=>{
+    const mp = parseFloat(monthlyPay);
+    if (mp>0) return mp;
+    if (derivedMonths&&derivedMonths>0&&la>0) return la/derivedMonths;
+    return null;
+  }, [monthlyPay, derivedMonths, la]);
+
+  // Implied annual interest rate (back-calculated from monthly * months vs principal)
+  const annualRate = useMemo(()=>{
+    if (!derivedMonthly||!derivedMonths||la<=0) return 0;
+    const totalPaid = derivedMonthly * derivedMonths;
+    if (totalPaid <= la) return 0;
+    // Approximate: simple interest rate annualized
+    const totalInterestFrac = (totalPaid - la) / la;
+    const years = derivedMonths / 12;
+    return years > 0 ? parseFloat(((totalInterestFrac / years) * 100).toFixed(2)) : 0;
+  }, [derivedMonthly, derivedMonths, la]);
+
+  const durationLabel = useMemo(()=>{
+    if (!derivedMonths) return null;
+    if (derivedMonths < 12) return `${derivedMonths} month${derivedMonths===1?'':'s'}`;
+    const y = Math.floor(derivedMonths/12), m = derivedMonths%12;
+    return y+'yr'+(m>0?` ${m}mo`:'');
+  }, [derivedMonths]);
+
+  // Total interest = (monthly * months) - principal
+  const totalInterest = useMemo(()=>{
+    if (!derivedMonthly||!derivedMonths||la<=0) return 0;
+    const totalPaid = derivedMonthly * derivedMonths;
+    return Math.max(0, totalPaid - la);
+  }, [derivedMonthly, derivedMonths, la]);
+
+  const save = () => {
+    if (!debtorName.trim()) { setErr('Enter the debtor name.'); return; }
+    if (!loanedAmt||isNaN(la)||la<=0) { setErr('Enter a valid loaned amount.'); return; }
+    const mp = derivedMonthly;
+    if (!mp||isNaN(mp)||mp<=0) { setErr('Enter monthly payable or payment duration.'); return; }
+    if (mp>la && annualRate===0) { setErr('Monthly payable cannot exceed the total amount (unless there is interest).'); return; }
+    if (!derivedMonths||derivedMonths<=0) { setErr('Enter a valid payment duration.'); return; }
+    onSave({
+      id:uid(), name:debtorName.trim(), loaned:la,
+      monthly:parseFloat(mp.toFixed(2)),
+      duration_months:derivedMonths,
+      remaining:la,
+      interest_rate: annualRate,
+      total_interest: parseFloat(totalInterest.toFixed(2)),
+      debt_type: debtType,  // 'debt' | 'loan'
+      created_at:new Date().toISOString()
+    });
+    onClose();
+  };
+
+  const btnStyle = (active) => ({
+    flex:1,padding:'9px 8px',borderRadius:9,border:'none',cursor:'pointer',
+    fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:700,
+    background:active?'var(--s3)':'transparent',
+    color:active?'var(--t1)':'var(--t2)',
+    boxShadow:active?'0 1px 4px rgba(0,0,0,.2)':'none',transition:'all .15s'
+  });
+
+  return e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&onClose()},
+    e('div',{className:'drw'},
+      e('div',{className:'hdl'}),
+      e('div',{className:'drw-head'},
+        e('div',{className:'drw-title'},'Add Debt'),
+        e('button',{className:'drw-cancel',onClick:onClose},'✕ Cancel')
+      ),
+      // Debt type selector
+      e('div',{className:'fg'},
+        e('label',{className:'lbl'},'Debt Type'),
+        e('div',{style:{display:'flex',gap:4,background:'var(--s2)',borderRadius:10,padding:4}},
+          e('button',{onClick:()=>setDebtType('debt'),style:btnStyle(debtType==='debt')},
+            '💸 Debt Only'
+          ),
+          e('button',{onClick:()=>setDebtType('loan'),style:btnStyle(debtType==='loan')},
+            '🏦 Loan'
+          )
+        )
+      ),
+      // Hint for selected type
+      e('div',{style:{
+        fontSize:12,color:'var(--t2)',
+        background:'var(--s2)',borderRadius:8,padding:'8px 12px',marginBottom:14,lineHeight:1.5
+      }},
+        debtType==='debt'
+          ? '💸 Debt Only — Paying will deduct from your current balance (e.g. borrowed money you owe someone).'
+          : '🏦 Loan — Paying will NOT affect your current balance (e.g. bank loan tracked separately).'
+      ),
+      err && e('div',{className:'err'},err),
+      e('div',{className:'fg'},
+        e('label',{className:'lbl'},'Debtor / Creditor Name'),
+        e('input',{className:'inp',type:'text',placeholder:'e.g. BDO Bank Loan',value:debtorName,onChange:ev=>setDebtorName(ev.target.value),autoFocus:true})
+      ),
+      e('div',{className:'fg'},
+        e('label',{className:'lbl'},'Total Amount (₱)'),
+        e('input',{className:'inp inp-lg',type:'number',placeholder:'0.00',value:loanedAmt,onChange:ev=>setLoanedAmt(ev.target.value),inputMode:'decimal'})
+      ),
+      // Monthly payment + Duration (combined, both always visible)
+      e('div',{className:'fg'},
+        e('label',{className:'lbl'},'Monthly Payment (₱)'),
+        e('input',{className:'inp',type:'number',placeholder:'0.00',value:monthlyPay,onChange:ev=>setMonthlyPay(ev.target.value),inputMode:'decimal'})
+      ),
+      e('div',{className:'fg'},
+        e('label',{className:'lbl'},'Duration (Months)'),
+        e('div',{style:{display:'flex',gap:8}},
+          e('input',{className:'inp',style:{flex:1},type:'number',placeholder:'e.g. 12',value:durVal,onChange:ev=>setDurVal(ev.target.value),inputMode:'decimal'}),
+          e('select',{className:'inp',style:{flex:'0 0 110px'},value:durUnit,onChange:ev=>setDurUnit(ev.target.value)},
+            e('option',{value:'months'},'Months'),
+            e('option',{value:'years'},'Years')
+          )
+        )
+      ),
+      // Live summary pill
+      (derivedMonths&&derivedMonthly) ? e('div',{style:{
+        background:'rgba(110,231,183,.08)',border:'1px solid rgba(110,231,183,.2)',
+        borderRadius:12,padding:'12px 14px',marginBottom:14
+      }},
+        e('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:0}},
+          e('div',null,
+            e('div',{style:{fontSize:10,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Monthly Payment'),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:16,color:'var(--acc)'}},fmt(derivedMonthly))
+          ),
+          e('div',{style:{textAlign:'right'}},
+            e('div',{style:{fontSize:10,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Total Duration'),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:16,color:'var(--acc4)'}},durationLabel)
+          )
+        ),
+        // Interest breakdown (always shown once summary is visible)
+        e('div',{style:{
+          borderTop:'1px solid rgba(110,231,183,.15)',paddingTop:10,marginTop:10,
+          display:'flex',justifyContent:'space-between',alignItems:'center'
+        }},
+          e('div',null,
+            e('div',{style:{fontSize:10,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Principal'),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:14,color:'var(--t1)'}},fmt(la))
+          ),
+          e('div',{style:{textAlign:'center'}},
+            e('div',{style:{fontSize:10,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Total Interest'),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:14,color:'var(--acc3)'}},fmt(totalInterest))
+          ),
+          e('div',{style:{textAlign:'right'}},
+            e('div',{style:{fontSize:10,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Total Cost'),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:14,color:'var(--red)'}},fmt(la+totalInterest))
+          )
+        )
+      ) : null,
+      e('button',{className:'btn',onClick:save},'Add Debt')
+    )
+  );
+}
+
+function DebtSection({ debts, onAddDebt, onPayDebt }) {
+  const [showAdd, setShowAdd]   = useState(false);
+  const [payTarget, setPayTarget] = useState(null); // debt being paid
+
+  const totalRemaining = debts.reduce((s,d)=>s+(d.remaining||0),0);
+
+  return e('div',{className:'debt-section'},
+    // Section header
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}},
+      e('div',{style:{display:'flex',alignItems:'center',gap:8}},
+        e('span',{style:{fontSize:16}},'💳'),
+        e('span',{style:{fontFamily:'Syne,sans-serif',fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)'}},'My Debts')
+      ),
+      e('button',{onClick:()=>setShowAdd(true),style:{
+        background:'none',border:'1px solid rgba(248,113,113,.3)',color:'var(--red)',
+        borderRadius:8,padding:'5px 12px',fontSize:12,fontWeight:700,
+        cursor:'pointer',fontFamily:"'DM Sans',sans-serif"
+      }}, '+ Add Debt')
+    ),
+
+    debts.length===0
+      ? e('div',{style:{
+          background:'var(--s1)',border:'1px solid var(--bdr)',borderRadius:16,
+          padding:'22px',textAlign:'center',marginBottom:4
+        }},
+          e('div',{style:{fontSize:32,marginBottom:8}},'🕊️'),
+          e('div',{style:{fontSize:13,color:'var(--t2)',lineHeight:1.5}},'No debts recorded.\nTap Add Debt to track money you owe.')
+        )
+      : e('div',null,
+          // Total summary
+          e('div',{style:{
+            background:'rgba(248,113,113,.06)',border:'1px solid rgba(248,113,113,.15)',
+            borderRadius:12,padding:'10px 14px',marginBottom:8,
+            display:'flex',justifyContent:'space-between',alignItems:'center'
+          }},
+            e('div',{style:{fontSize:12,color:'var(--t2)',fontWeight:600}},'Total Remaining Debt'),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:16,color:'var(--red)'}},fmt(totalRemaining))
+          ),
+          debts.map(debt => {
+            const pct = Math.min(100, ((debt.loaned - debt.remaining) / debt.loaned) * 100);
+            const paidSoFar = debt.loaned - debt.remaining;
+            const monthsLeft = debt.monthly > 0 && debt.remaining > 0 ? Math.ceil(debt.remaining / debt.monthly) : 0;
+            const payoffLabel = monthsLeft <= 0 ? null : monthsLeft < 12
+              ? `${monthsLeft} mo${monthsLeft===1?'':'s'}`
+              : (() => { const y=Math.floor(monthsLeft/12); const m=monthsLeft%12; return y+'yr'+(m>0?` ${m}mo`:''); })();
+            const isLoan = debt.debt_type === 'loan';
+            const hasInterest = (debt.total_interest||0) > 0;
+            return e('div',{key:debt.id,className:'debt-card'},
+              e('div',{className:'debt-top'},
+                e('div',{className:'debt-ico'},isLoan?'🏦':'💸'),
+                e('div',{className:'debt-info'},
+                  e('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
+                    e('div',{className:'debt-name'},debt.name),
+                    e('span',{style:{
+                      display:'inline-flex',alignItems:'center',padding:'2px 7px',borderRadius:20,
+                      fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',
+                      background: isLoan?'rgba(56,189,248,.12)':'rgba(248,113,113,.12)',
+                      color: isLoan?'var(--acc2)':'var(--red)'
+                    }}, isLoan ? 'Loan' : 'Debt')
+                  ),
+                  e('div',{className:'debt-sub'},`Monthly: ${fmt(debt.monthly||0)}`+(payoffLabel?` · Payoff: ${payoffLabel}`:''))
+                )
+              ),
+              e('div',{className:'debt-nums'},
+                e('div',{className:'debt-num'},
+                  e('div',{className:'debt-num-lbl'},'Principal'),
+                  e('div',{className:'debt-num-val',style:{color:'var(--t2)'}},fmt(debt.loaned))
+                ),
+                e('div',{className:'debt-num'},
+                  e('div',{className:'debt-num-lbl'},'Paid'),
+                  e('div',{className:'debt-num-val',style:{color:'var(--acc)'}},fmt(paidSoFar))
+                ),
+                e('div',{className:'debt-num'},
+                  e('div',{className:'debt-num-lbl'},'Remaining'),
+                  e('div',{className:'debt-num-val',style:{color:'var(--red)'}},fmt(debt.remaining))
+                ),
+                e('div',{className:'debt-num'},
+                  e('div',{className:'debt-num-lbl'},'Time Left'),
+                  e('div',{className:'debt-num-val',style:{color:debt.remaining<=0?'var(--acc)':'var(--acc4)'}},
+                    debt.remaining<=0 ? '✓ Done' : (payoffLabel||'—')
+                  )
+                )
+              ),
+              hasInterest && e('div',{style:{display:'flex',gap:6,marginBottom:8}},
+                e('div',{style:{
+                  flex:1,background:'rgba(244,114,182,.08)',border:'1px solid rgba(244,114,182,.18)',
+                  borderRadius:10,padding:'7px 10px',textAlign:'center'
+                }},
+                  e('div',{style:{fontSize:9,textTransform:'uppercase',letterSpacing:'.5px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Interest Rate'),
+                  e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:13,color:'var(--acc3)'}},`${debt.interest_rate}% p.a.`)
+                ),
+                e('div',{style:{
+                  flex:1,background:'rgba(244,114,182,.08)',border:'1px solid rgba(244,114,182,.18)',
+                  borderRadius:10,padding:'7px 10px',textAlign:'center'
+                }},
+                  e('div',{style:{fontSize:9,textTransform:'uppercase',letterSpacing:'.5px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Total Interest'),
+                  e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:13,color:'var(--acc3)'}},fmt(debt.total_interest))
+                ),
+                e('div',{style:{
+                  flex:1,background:'rgba(244,114,182,.08)',border:'1px solid rgba(244,114,182,.18)',
+                  borderRadius:10,padding:'7px 10px',textAlign:'center'
+                }},
+                  e('div',{style:{fontSize:9,textTransform:'uppercase',letterSpacing:'.5px',color:'var(--t3)',fontWeight:700,marginBottom:2}},'Total Cost'),
+                  e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:13,color:'var(--red)'}},fmt(debt.loaned+(debt.total_interest||0)))
+                )
+              ),
+              e('div',{className:'debt-pbar'},
+                e('div',{className:'debt-pfill',style:{width:pct+'%',background:pct>=100?'var(--acc)':'var(--red)'}})
+              ),
+              isLoan && debt.remaining > 0 && e('div',{style:{
+                fontSize:11,color:'var(--acc2)',textAlign:'center',marginBottom:6,
+                background:'rgba(56,189,248,.06)',borderRadius:8,padding:'5px 10px'
+              }},'🏦 Loan payment — does not affect your available balance'),
+              debt.remaining > 0
+                ? e('button',{
+                    onClick:()=>setPayTarget(debt),
+                    style:{
+                      width:'100%',background:'rgba(248,113,113,.12)',color:'var(--red)',
+                      border:'1px solid rgba(248,113,113,.25)',borderRadius:10,
+                      padding:'10px',fontSize:13,fontWeight:700,cursor:'pointer',
+                      fontFamily:"'DM Sans',sans-serif",transition:'all .2s'
+                    }
+                  }, isLoan ? '✓ Mark Payment Made' : '💸 Pay Debt')
+                : e('div',{style:{
+                    textAlign:'center',fontSize:13,fontWeight:700,
+                    color:'var(--acc)',padding:'8px 0'
+                  }},'✅ Fully Paid!')
+            );
+          })
+        ),
+
+    // Add debt drawer
+    showAdd && e(AddDebtDrawer,{onClose:()=>setShowAdd(false),onSave:d=>{ onAddDebt(d); setShowAdd(false); }}),
+
+    // Pay confirmation modal
+    payTarget && e('div',{className:'ov-center'},
+      e('div',{className:'modal'},
+        e('div',{className:'modal-title'},payTarget.debt_type==='loan'?'Mark Loan Payment':'Pay Debt'),
+        e('div',{className:'modal-desc'},
+          payTarget.debt_type==='loan'
+            ? `Mark payment of ${fmt(payTarget.monthly)} for "${payTarget.name}"?\n\n🏦 This is a loan — only the remaining loan balance will be reduced. Your available balance will NOT be affected.`
+            : `Pay ${fmt(payTarget.monthly)} to "${payTarget.name}"?\n\n💸 This is a debt — the amount will be deducted from your current available balance.`
+        ),
+        e('button',{className:'btn',style:{marginBottom:8},onClick:()=>{ onPayDebt(payTarget); setPayTarget(null); }},
+          payTarget.debt_type==='loan' ? `✓ Mark ${fmt(payTarget.monthly)} Paid` : `💸 Pay ${fmt(payTarget.monthly)}`
+        ),
+        e('button',{className:'btn btn-ghost',onClick:()=>setPayTarget(null)},'Cancel')
+      )
+    )
+  );
+}
+
+// ── DEBT SCREEN ───────────────────────────────────────────────────
+function DebtScreen({ data, onAddDebt, onPayDebt }) {
+  const { debts } = data;
+  return e('div',null,
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
+      e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:28,fontWeight:800,letterSpacing:'-1px'}},'My Debts'),
+      debts&&debts.length>0 && e('div',{style:{
+        background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',
+        borderRadius:20,padding:'5px 14px',
+        fontSize:12,fontWeight:700,color:'var(--red)',
+        textTransform:'uppercase',letterSpacing:'.6px'
+      }},`${debts.filter(d=>d.remaining>0).length} ACTIVE`)
+    ),
+    e(DebtSection,{debts:debts||[],onAddDebt,onPayDebt})
   );
 }
 
@@ -745,7 +1103,7 @@ function PlannerScreen({ data, onDelete, onSave }) {
 function GoalsScreen({ data, onAddGoal, onDelete, onContribute }) {
   const { goals } = data;
   const [showAdd, setShowAdd] = useState(false);
-  const [contrib, setContrib] = useState(null);
+  const [contrib, setContrib] = useState(null); // { id, name }
   const [gName, setGName]   = useState('');
   const [gTarget, setGTarget]= useState('');
   const [gIcon, setGIcon]   = useState('🏠');
@@ -759,7 +1117,7 @@ function GoalsScreen({ data, onAddGoal, onDelete, onContribute }) {
   };
   const doContrib = () => {
     if (!cAmt||parseFloat(cAmt)<=0) return;
-    onContribute(contrib, parseFloat(cAmt));
+    onContribute(contrib.id, parseFloat(cAmt), contrib.name);
     setContrib(null); setCAmt('');
   };
 
@@ -789,7 +1147,7 @@ function GoalsScreen({ data, onAddGoal, onDelete, onContribute }) {
           e('span',null,`Target: ${fmt(g.target_amount)}`)
         ),
         pct<100 && e('button',{
-          onClick:()=>setContrib(g.id),
+          onClick:()=>setContrib({id:g.id,name:g.name}),
           style:{marginTop:10,width:'100%',background:'transparent',border:`1px solid ${g.color||'var(--acc)'}`,borderRadius:10,padding:'8px',fontSize:13,fontWeight:700,color:g.color||'var(--acc)',cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}
         },'+ Add Savings')
       );
@@ -827,9 +1185,9 @@ function GoalsScreen({ data, onAddGoal, onDelete, onContribute }) {
     contrib && e('div',{className:'ov-center'},
       e('div',{className:'modal'},
         e('div',{className:'modal-title'},'Add Savings'),
-        e('div',{className:'modal-desc'},'How much are you adding to this goal?'),
+        e('div',{className:'modal-desc'},`Adding to "${contrib.name}". This amount will be deducted from your available balance.`),
         e('input',{className:'inp',type:'number',placeholder:'Amount (₱)',value:cAmt,onChange:ev=>setCAmt(ev.target.value),inputMode:'decimal',autoFocus:true,style:{marginBottom:14}}),
-        e('button',{className:'btn',style:{marginBottom:8},onClick:doContrib},'Add'),
+        e('button',{className:'btn',style:{marginBottom:8},onClick:doContrib},'Save & Deduct from Balance'),
         e('button',{className:'btn btn-ghost',onClick:()=>setContrib(null)},'Cancel')
       )
     )
@@ -899,13 +1257,14 @@ function LogScreen({ data, onDelete }) {
 }
 
 // ── MANAGE TRANSACTIONS DRAWER ────────────────────────────────────
-function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll, onResetAll }) {
+function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll, onResetAll, onDeleteDebt }) {
   const [tab, setTab] = useState('expenses');
-  const [confirm, setConfirm] = useState(null); // { type:'one'|'tab'|'all'|'reset', tab, id, label }
+  const [confirm, setConfirm] = useState(null); // { type:'one'|'tab'|'all'|'reset'|'debt', tab, id, label }
   const tabs = [
     { key:'expenses', label:'Expenses', icon:'💸', items: data.expenses||[] },
     { key:'income',   label:'Income',   icon:'💰', items: data.income||[]   },
     { key:'planned',  label:'Bills',    icon:'📅', items: data.planned||[]  },
+    { key:'debts',    label:'Debts',    icon:'💳', items: data.debts||[]    },
   ];
   const active = tabs.find(t=>t.key===tab);
 
@@ -914,6 +1273,7 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll,
     if (confirm.type==='tab')   { onDeleteSome(confirm.tab); }
     if (confirm.type==='all')   { onDeleteAll(); }
     if (confirm.type==='reset') { onResetAll(); }
+    if (confirm.type==='debt')  { onDeleteDebt(confirm.id); }
     setConfirm(null);
   };
 
@@ -967,7 +1327,7 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll,
         e('span',{style:{fontSize:13,color:'var(--t2)',fontWeight:500}},
           active.items.length===0 ? 'No records' : `${active.items.length} record${active.items.length!==1?'s':''}`
         ),
-        e('button',{
+        tab!=='debts' && e('button',{
           onClick:()=>active.items.length>0&&setConfirm({type:'tab',tab,label:`all ${active.label.toLowerCase()}`}),
           style:{background:'rgba(248,113,113,.25)',border:'none',borderRadius:20,
             padding:'7px 16px',fontSize:13,fontWeight:700,color:'var(--red)',
@@ -981,8 +1341,43 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll,
             e('div',{style:{fontSize:44,marginBottom:10}},'✅'),
             e('div',{style:{fontSize:14,color:'var(--t2)'}},'No '+active.label.toLowerCase()+' to delete.')
           )
-        : e('div',{style:{background:'var(--s1)',border:'1px solid var(--bdr)',borderRadius:14,
-            padding:'0 14px',marginBottom:14,maxHeight:260,overflowY:'auto'}},
+        : tab==='debts'
+          // ── Debts list ──
+          ? e('div',{style:{background:'var(--s1)',border:'1px solid var(--bdr)',borderRadius:14,
+              padding:'0 14px',marginBottom:14,maxHeight:260,overflowY:'auto'}},
+              (data.debts||[]).map((debt,i)=>{
+                const isLoan = debt.debt_type==='loan';
+                const pct = debt.loaned>0 ? Math.min(100,((debt.loaned-debt.remaining)/debt.loaned)*100) : 0;
+                return e('div',{key:debt.id,style:{display:'flex',alignItems:'center',gap:12,
+                  padding:'13px 0',borderBottom:i<(data.debts||[]).length-1?'1px solid var(--bdr)':'none'}},
+                  e('div',{style:{width:44,height:44,borderRadius:13,
+                    background:isLoan?'rgba(56,189,248,.12)':'rgba(248,113,113,.12)',
+                    display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}},
+                    isLoan?'🏦':'💸'
+                  ),
+                  e('div',{style:{flex:1,minWidth:0}},
+                    e('div',{style:{fontSize:14,fontWeight:600,color:'var(--t1)',
+                      whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},debt.name),
+                    e('div',{style:{fontSize:12,color:'var(--t2)',marginTop:2}},
+                      `${Math.round(pct)}% paid · Remaining: ${fmt(debt.remaining||0)}`
+                    )
+                  ),
+                  e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:14,
+                    color:'var(--red)',flexShrink:0,marginRight:6}},fmt(debt.loaned)),
+                  e('button',{
+                    onClick:()=>setConfirm({type:'debt',id:debt.id,label:`"${debt.name}" debt record`}),
+                    style:{background:'none',border:'none',cursor:'pointer',
+                      color:'var(--t3)',padding:6,borderRadius:8,display:'flex',
+                      alignItems:'center',justifyContent:'center',flexShrink:0,transition:'color .15s'},
+                    onMouseEnter:ev=>ev.currentTarget.style.color='var(--red)',
+                    onMouseLeave:ev=>ev.currentTarget.style.color='var(--t3)'
+                  }, TrashIcon)
+                );
+              })
+            )
+          // ── Regular tx list ──
+          : e('div',{style:{background:'var(--s1)',border:'1px solid var(--bdr)',borderRadius:14,
+              padding:'0 14px',marginBottom:14,maxHeight:260,overflowY:'auto'}},
             active.items.map((item,i)=>{
               const label   = item.note||item.source||item.name||'Transaction';
               const subLabel= tab==='planned'
@@ -1208,7 +1603,8 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
       onDeleteSome:handleDeleteSomeTab,
       onDeleteOne:handleDeleteOne,
       onDeleteAll:handleDeleteAll,
-      onResetAll:handleResetAllLocal
+      onResetAll:handleResetAllLocal,
+      onDeleteDebt: id => { onUpdate({ debts:(data.debts||[]).filter(d=>d.id!==id) }); }
     }),
     // Gate: verify PIN before opening manage drawer
     flow==='pin-gate' && e(PinModal,{mode:'verify',
@@ -1239,7 +1635,13 @@ const IC = {
   plan:    e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor'},e('rect',{x:3,y:4,width:18,height:18,rx:2,ry:2}),e('line',{x1:16,y1:2,x2:16,y2:6}),e('line',{x1:8,y1:2,x2:8,y2:6}),e('line',{x1:3,y1:10,x2:21,y2:10})),
   goal:    e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor'},e('circle',{cx:12,cy:12,r:10}),e('circle',{cx:12,cy:12,r:6}),e('circle',{cx:12,cy:12,r:2})),
   log:     e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor'},e('path',{d:'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'}),e('polyline',{points:'14,2 14,8 20,8'}),e('line',{x1:16,y1:13,x2:8,y2:13}),e('line',{x1:16,y1:17,x2:8,y2:17}),e('polyline',{points:'10,9 9,9 8,9'})),
-  plus:    e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2.5},e('line',{x1:12,y1:5,x2:12,y2:19}),e('line',{x1:5,y1:12,x2:19,y2:12}))
+  plus:    e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2.5},e('line',{x1:12,y1:5,x2:12,y2:19}),e('line',{x1:5,y1:12,x2:19,y2:12})),
+  debt:    e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+              e('rect',{x:2,y:5,width:20,height:14,rx:3}),
+              e('line',{x1:2,y1:10,x2:22,y2:10}),
+              e('line',{x1:6,y1:15,x2:10,y2:15}),
+              e('line',{x1:14,y1:15,x2:16,y2:15})
+           )
 };
 
 // ── ROOT APP ──────────────────────────────────────────────────────
@@ -1270,11 +1672,43 @@ function App() {
   const handleDelete = (key, id) => {
     save({...data, [key]:(data[key]||[]).filter(x=>x.id!==id)});
   };
-  const handleContrib = (goalId, amt) => {
-    save({...data, goals:data.goals.map(g=>g.id===goalId?{...g,current_amount:(g.current_amount||0)+amt}:g)});
+  const handleContrib = (goalId, amt, goalName) => {
+    const savingsExpense = {
+      id: uid(), amount: amt,
+      note: `Savings — ${goalName||'Goal'}`,
+      category: 'Savings', date: today(), created_at: new Date().toISOString()
+    };
+    save({
+      ...data,
+      goals: data.goals.map(g=>g.id===goalId?{...g,current_amount:(g.current_amount||0)+amt}:g),
+      expenses: [savingsExpense,...(data.expenses||[])]
+    });
+  };
+  const handleAddDebt = debt => {
+    save({...data, debts:[debt,...(data.debts||[])]});
+  };
+  const handlePayDebt = debt => {
+    // Reduce remaining debt balance
+    const newRemaining = Math.max(0, (debt.remaining||0) - (debt.monthly||0));
+    const updatedDebts = (data.debts||[]).map(d=>d.id===debt.id ? {...d, remaining:newRemaining} : d);
+    // Only deduct from available balance if it's "Debt Only" type (not a loan)
+    if (debt.debt_type === 'loan') {
+      // Loan: just track remaining, do NOT add to expenses
+      save({...data, debts:updatedDebts});
+    } else {
+      // Debt Only: deduct from balance by adding an expense
+      const payExpense = {
+        id: uid(), amount: debt.monthly, note: `Debt Payment — ${debt.name}`,
+        category: 'Bills', date: today(), created_at: new Date().toISOString()
+      };
+      save({...data, debts:updatedDebts, expenses:[payExpense,...(data.expenses||[])]});
+    }
+  };
+  const handleDeleteDebt = id => {
+    save({...data, debts:(data.debts||[]).filter(d=>d.id!==id)});
   };
   const handleUpdate = updates => { save({...data,...updates}); };
-  const handleClearTx = () => { save({...db.blank(), paydays:data.paydays||[]}); };
+  const handleClearTx = () => { save({...db.blank(), paydays:data.paydays||[], debts:data.debts||[]}); };
   const handleResetAll = () => {
     try { Object.keys(localStorage).filter(k=>k.startsWith('paid_')).forEach(k=>localStorage.removeItem(k)); } catch{}
     pref.set('display_name',''); pref.set('photo',null); pref.set('pin',null);
@@ -1299,6 +1733,7 @@ function App() {
 
   const pages = {
     home:    e(HomeScreen,    {data}),
+    debt:    e(DebtScreen,    {data, onAddDebt:handleAddDebt, onPayDebt:handlePayDebt, onDeleteDebt:handleDeleteDebt}),
     planner: e(PlannerScreen, {data, onDelete:handleDelete, onSave:handleSave}),
     goals:   e(GoalsScreen,   {data, onAddGoal:g=>handleSave('goals',g), onDelete:handleDelete, onContribute:handleContrib}),
     log:     e(LogScreen,     {data, onDelete:handleDelete}),
@@ -1308,7 +1743,30 @@ function App() {
   return e('div',{className:'shell'},
     // Top bar (hidden on profile — profile has its own header)
     tab!=='profile' && e('div',{className:'topbar'},
-      e('div',{className:'topbar-logo'},'My',e('span',null,'Budget')),
+      e('div',{style:{display:'flex',alignItems:'center',gap:8}},
+        e('button',{
+          onClick:()=>setTab('debt'),
+          title:'View Debts',
+          style:{
+            width:36,height:36,borderRadius:10,
+            background:(data.debts&&data.debts.length>0)?'rgba(248,113,113,.15)':'var(--s2)',
+            border:'1px solid '+((data.debts&&data.debts.length>0)?'rgba(248,113,113,.3)':'var(--bdr)'),
+            display:'flex',alignItems:'center',justifyContent:'center',
+            color:(tab==='debt')?'var(--red)':(data.debts&&data.debts.length>0)?'var(--red)':'var(--t3)',
+            cursor:'pointer',flexShrink:0,transition:'all .2s',position:'relative',padding:0,
+            boxShadow:tab==='debt'?'0 0 0 2px rgba(248,113,113,.4)':'none'
+          }
+        },
+          e('div',{style:{width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center'}},IC.debt),
+          (data.debts&&data.debts.filter(d=>d.remaining>0).length>0) && e('div',{style:{
+            position:'absolute',top:-4,right:-4,width:16,height:16,borderRadius:'50%',
+            background:'var(--red)',color:'#fff',fontSize:9,fontWeight:800,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            border:'2px solid var(--bg)'
+          }},data.debts.filter(d=>d.remaining>0).length)
+        ),
+        e('div',{className:'topbar-logo'},'My',e('span',null,'Budget'))
+      ),
       e('div',{className:'topbar-avatar',onClick:()=>setTab('profile')},
         photo ? e('img',{src:photo,alt:'avatar'}) : e('span',null,initials)
       )
