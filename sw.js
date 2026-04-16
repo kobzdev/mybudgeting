@@ -5,7 +5,7 @@
    That's it — old cache is wiped, fresh files load.
    ============================================================ */
 
-const CACHE_NAME = 'flowo-offline-v2';
+const CACHE_NAME = 'mybudget-v1';
 
 const ASSETS = [
   '/',
