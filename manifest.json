@@ -2,7 +2,7 @@
   "name": "MyBudget — Budget Tracker",
   "short_name": "MyBudget",
   "description": "Offline personal budget tracker — no login required",
-  "start_url": "./",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0f1e",
   "theme_color": "#0a0f1e",
