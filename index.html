@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 [data-theme="dark"]{--bg:#0a0f1e;--s1:#111827;--s2:#1a2234;--s3:#232d42;--t1:#f1f5f9;--t2:#94a3b8;--t3:#475569;--bdr:rgba(255,255,255,0.07)}
 [data-theme="light"]{--bg:#f0f4f8;--s1:#ffffff;--s2:#f1f5f9;--s3:#e2e8f0;--t1:#0f172a;--t2:#475569;--t3:#94a3b8;--bdr:rgba(0,0,0,0.08)}
@@ -706,7 +707,12 @@ function DebtSection({ debts, onAddDebt, onPayDebt }) {
           debts.map(debt => {
             const pct = Math.min(100, ((debt.loaned - debt.remaining) / debt.loaned) * 100);
             const paidSoFar = debt.loaned - debt.remaining;
-            const monthsLeft = debt.monthly > 0 && debt.remaining > 0 ? Math.ceil(debt.remaining / debt.monthly) : 0;
+            // Use stored duration_months when no payment has been made yet (remaining === loaned),
+            // otherwise calculate remaining months from current balance / monthly payment
+            const monthsLeft = debt.remaining <= 0 ? 0
+              : (debt.remaining >= debt.loaned && debt.duration_months > 0)
+                ? debt.duration_months
+                : (debt.monthly > 0 ? Math.ceil(debt.remaining / debt.monthly) : 0);
             const payoffLabel = monthsLeft <= 0 ? null : monthsLeft < 12
               ? `${monthsLeft} mo${monthsLeft===1?'':'s'}`
               : (() => { const y=Math.floor(monthsLeft/12); const m=monthsLeft%12; return y+'yr'+(m>0?` ${m}mo`:''); })();
@@ -1489,7 +1495,10 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
   const [flow, setFlow] = useState(null);
   const [hasPin, setHasPin] = useState(()=>!!pref.get('pin'));
   const [photoSrc, setPhotoSrc] = useState(()=>pref.get('photo')||null);
-  const fileRef = useRef(null);
+  const [importErr, setImportErr]         = useState('');
+  const [importSuccess, setImportSuccess] = useState(false);
+  const fileRef   = useRef(null);
+  const importRef = useRef(null);
 
   // Re-check PIN state whenever flow changes (after saving a new PIN)
   useEffect(()=>{ setHasPin(!!pref.get('pin')); }, [flow]);
@@ -1515,11 +1524,70 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
     reader.readAsDataURL(file);
   };
 
-  const exportData = () => {
-    const blob=new Blob([JSON.stringify(db.load(),null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download=`mybudget-backup-${today()}.json`; a.click();
-    URL.revokeObjectURL(url);
+  // ── Export to Excel ──
+  const exportToExcel = () => {
+    const d = db.load();
+    const wb = XLSX.utils.book_new();
+    const incRows = (d.income||[]).map(x=>({ Date:x.date||'', Source:x.source||x.note||'', Amount:parseFloat(x.amount||0) }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length?incRows:[{Date:'',Source:'',Amount:''}]), 'Income');
+    const expRows = (d.expenses||[]).map(x=>({ Date:x.date||'', Note:x.note||'', Category:x.category||'Other', Amount:parseFloat(x.amount||0) }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expRows.length?expRows:[{Date:'',Note:'',Category:'',Amount:''}]), 'Expenses');
+    const planRows = (d.planned||[]).map(x=>({ Name:x.name||'', DueDate:x.due_date||'', Amount:parseFloat(x.amount||0), Recurring:x.recurring?'Yes':'No' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(planRows.length?planRows:[{Name:'',DueDate:'',Amount:'',Recurring:''}]), 'Bills');
+    const goalRows = (d.goals||[]).map(x=>({ Name:x.name||'', Target:parseFloat(x.target||0), Current:parseFloat(x.current_amount||0), Icon:x.icon||'' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(goalRows.length?goalRows:[{Name:'',Target:'',Current:'',Icon:''}]), 'Goals');
+    // Export all debt fields so import can restore them fully
+    const debtRows = (d.debts||[]).map(x=>({
+      Name:x.name||'', Type:x.debt_type||'debt',
+      Loaned:parseFloat(x.loaned||0), Monthly:parseFloat(x.monthly||0),
+      Remaining:parseFloat(x.remaining||0), DurationMonths:parseInt(x.duration_months||0),
+      InterestRate:parseFloat(x.interest_rate||0), TotalInterest:parseFloat(x.total_interest||0)
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(debtRows.length?debtRows:[{Name:'',Type:'',Loaned:'',Monthly:'',Remaining:'',DurationMonths:'',InterestRate:'',TotalInterest:''}]), 'Debts');
+    const metaRows = (d.paydays||[]).map(day=>({ PaydayDay:day }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(metaRows.length?metaRows:[{PaydayDay:''}]), 'Paydays');
+    XLSX.writeFile(wb, `mybudget-export-${today()}.xlsx`);
+  };
+
+  // ── Import from Excel ──
+  const importFromExcel = (ev) => {
+    const file = ev.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e2 => {
+      try {
+        const wb = XLSX.read(e2.target.result, {type:'binary'});
+        const readSheet = name => { const ws=wb.Sheets[name]; return ws?XLSX.utils.sheet_to_json(ws):[]; };
+        const incData=readSheet('Income'), expData=readSheet('Expenses');
+        const planData=readSheet('Bills'), goalData=readSheet('Goals');
+        const debtData=readSheet('Debts'), paydayData=readSheet('Paydays');
+        if (!incData.length&&!expData.length&&!planData.length&&!goalData.length&&!debtData.length) {
+          setImportErr('File does not appear to be a MyBudget export.'); return;
+        }
+        const imported = {
+          income:   incData.map(r=>({ id:uid(), source:r.Source||'', amount:parseFloat(r.Amount||0), date:r.Date||today(), created_at:new Date().toISOString() })),
+          expenses: expData.map(r=>({ id:uid(), note:r.Note||'', category:r.Category||'Other', amount:parseFloat(r.Amount||0), date:r.Date||today(), created_at:new Date().toISOString() })),
+          planned:  planData.map(r=>({ id:uid(), name:r.Name||'', due_date:r.DueDate||today(), amount:parseFloat(r.Amount||0), recurring:r.Recurring==='Yes', created_at:new Date().toISOString() })),
+          goals:    goalData.map(r=>({ id:uid(), name:r.Name||'', target:parseFloat(r.Target||0), current_amount:parseFloat(r.Current||0), icon:r.Icon||'🏠', color:'#6ee7b7', created_at:new Date().toISOString() })),
+          // Restore ALL debt fields including interest so Debt screen shows them correctly
+          debts:    debtData.map(r=>({
+            id:uid(), name:r.Name||'', debt_type:r.Type||'debt',
+            loaned:parseFloat(r.Loaned||0), monthly:parseFloat(r.Monthly||0),
+            remaining:parseFloat(r.Remaining||0), duration_months:parseInt(r.DurationMonths||0),
+            interest_rate:parseFloat(r.InterestRate||0),
+            total_interest:parseFloat(r.TotalInterest||0),  // ← fixed: was hardcoded 0
+            created_at:new Date().toISOString()
+          })),
+          paydays:  paydayData.map(r=>parseInt(r.PaydayDay||0)).filter(d=>d>=1&&d<=31),
+        };
+        onUpdate(imported);
+        setImportSuccess(true);
+        setTimeout(()=>setImportSuccess(false), 3000);
+      } catch(err) {
+        setImportErr('Could not read file. Make sure it is a valid MyBudget .xlsx export.');
+      }
+    };
+    reader.readAsBinaryString(file);
+    ev.target.value = '';
   };
 
   const totI = data.income.reduce((s,x)=>s+parseFloat(x.amount||0),0);
@@ -1613,6 +1681,39 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
         )
       )
     ),
+    // Data Management
+    e('div',{className:'slbl'},'Data Management'),
+    e('div',{className:'card card-sm',style:{marginBottom:12}},
+      e('div',{className:'mi',onClick:exportToExcel},
+        e('div',{className:'mi-ico',style:{background:'rgba(110,231,183,.12)'}},
+          e('svg',{width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'var(--acc)',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+            e('rect',{x:3,y:3,width:18,height:18,rx:2}),e('path',{d:'M3 9h18'}),e('path',{d:'M9 21V9'}),
+            e('path',{d:'M15 13l-2 2 2 2'}),e('path',{d:'M11 13l2 2-2 2'})
+          )
+        ),
+        e('div',{className:'mi-info'},
+          e('div',{className:'mi-lbl'},'Export to Excel'),
+          e('div',{className:'mi-sub'},'Download all data as .xlsx file')
+        ),
+        e('span',{className:'mi-arr'},'›')
+      ),
+      e('div',{className:'mi',onClick:()=>importRef.current.click()},
+        e('div',{className:'mi-ico',style:{background:'rgba(56,189,248,.12)'}},
+          e('svg',{width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'var(--acc2)',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+            e('path',{d:'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4'}),
+            e('polyline',{points:'17 8 12 3 7 8'}),e('line',{x1:12,y1:3,x2:12,y2:15})
+          )
+        ),
+        e('div',{className:'mi-info'},
+          e('div',{className:'mi-lbl'},'Import from Excel'),
+          e('div',{className:'mi-sub'},'Restore data from a MyBudget .xlsx export')
+        ),
+        e('span',{className:'mi-arr'},'›')
+      ),
+      importErr && e('div',{className:'err',style:{margin:'8px 0 0'}},importErr),
+      importSuccess && e('div',{style:{background:'rgba(110,231,183,.1)',border:'1px solid rgba(110,231,183,.2)',color:'var(--acc)',borderRadius:10,padding:'10px 14px',fontSize:13,marginTop:8}},'✅ Data imported successfully!')
+    ),
+    e('input',{ref:importRef,type:'file',accept:'.xlsx',style:{display:'none'},onChange:importFromExcel}),
     // Data & Security
     e('div',{className:'slbl'},'Data & Security'),
     e('div',{className:'card card-sm',style:{marginBottom:12}},
