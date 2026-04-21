@@ -936,7 +936,13 @@ function HomeScreen({ data }) {
         },
         plugins:{
           legend:{ display:false },
-          tooltip:{ callbacks:{ label: ctx=>`${ctx.label}: ₱${ctx.parsed.toLocaleString()}` } }
+          tooltip:{ callbacks:{
+            label: ctx=>{
+              const total = ctx.dataset.data.reduce((s,v)=>s+v,0);
+              const pct = total>0?((ctx.parsed/total)*100).toFixed(1):'0';
+              return `${ctx.label}: ₱${ctx.parsed.toLocaleString()} (${pct}%)`;
+            }
+          }}
         }
       }
     });
@@ -999,21 +1005,29 @@ function HomeScreen({ data }) {
         )
       ),
       e('div',{style:{display:'flex',flexWrap:'wrap',gap:'8px 14px',marginTop:14,justifyContent:'center'}},
-        Object.entries(catTotals).sort((a,b)=>b[1]-a[1]).map(([cat,amt],i)=>{
-          const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
-          const ci = CAT[cat]||CAT.Other;
-          const color = DISTINCT_COLORS[i % DISTINCT_COLORS.length];
-          return e('div',{key:cat,onClick:()=>setExpandedCat(cat),style:{
-            display:'flex',alignItems:'center',gap:6,fontSize:12,
-            cursor:'pointer',padding:'4px 8px',borderRadius:8,
-            background:expandedCat===cat?'var(--s3)':'transparent',
-            transition:'background .15s'
-          }},
-            e('div',{style:{width:10,height:10,borderRadius:3,background:color,flexShrink:0}}),
-            e('span',{style:{color:'var(--t2)'}},(ci.e||'')+' '+cat),
-            e('span',{style:{fontWeight:700,color:'var(--t1)',marginLeft:2}},fmt(amt))
-          );
-        })
+        (()=>{
+          const grandTotal = Object.values(catTotals).reduce((s,v)=>s+v,0);
+          return Object.entries(catTotals).sort((a,b)=>b[1]-a[1]).map(([cat,amt],i)=>{
+            const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
+            const ci = CAT[cat]||CAT.Other;
+            const color = DISTINCT_COLORS[i % DISTINCT_COLORS.length];
+            const pct = grandTotal>0?((amt/grandTotal)*100).toFixed(1):'0';
+            return e('div',{key:cat,onClick:()=>setExpandedCat(cat),style:{
+              display:'flex',alignItems:'center',gap:6,fontSize:12,
+              cursor:'pointer',padding:'4px 8px',borderRadius:8,
+              background:expandedCat===cat?'var(--s3)':'transparent',
+              transition:'background .15s'
+            }},
+              e('div',{style:{width:10,height:10,borderRadius:3,background:color,flexShrink:0}}),
+              e('span',{style:{color:'var(--t2)'}},(ci.e||'')+' '+cat),
+              e('span',{style:{fontWeight:700,color:'var(--t1)',marginLeft:2}},fmt(amt)),
+              e('span',{style:{
+                fontSize:10,fontWeight:700,color:'var(--t3)',
+                background:'var(--s3)',borderRadius:10,padding:'1px 6px',marginLeft:2
+              }},pct+'%')
+            );
+          });
+        })()
       )
     ),
     // ── Category drill-down drawer ──
