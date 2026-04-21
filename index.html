@@ -925,12 +925,35 @@ function HomeScreen({ data }) {
     const vals   = labels.map(c=>catTotals[c]);
     const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
     const colors = labels.map((_,i)=>DISTINCT_COLORS[i % DISTINCT_COLORS.length]);
+    const sliceLabelPlugin = {
+      id: 'sliceLabels',
+      afterDraw(chart) {
+        const { ctx, data } = chart;
+        const total = data.datasets[0].data.reduce((s,v)=>s+v,0);
+        if (!total) return;
+        chart.getDatasetMeta(0).data.forEach((arc, i) => {
+          const pct = ((data.datasets[0].data[i] / total) * 100);
+          if (pct < 5) return; // skip tiny slices
+          const angle = (arc.startAngle + arc.endAngle) / 2;
+          const r = (arc.innerRadius + arc.outerRadius) / 2;
+          const x = arc.x + Math.cos(angle) * r;
+          const y = arc.y + Math.sin(angle) * r;
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#0a0f1e';
+          ctx.font = 'bold 11px DM Sans, sans-serif';
+          ctx.fillText(pct.toFixed(1) + '%', x, y);
+          ctx.restore();
+        });
+      }
+    };
     donutChart.current = new Chart(donutRef.current,{
       type:'doughnut',
-      data:{ labels, datasets:[{ data:vals, backgroundColor:colors.map(c=>c+'cc'), borderColor:colors, borderWidth:2, hoverOffset:8 }] },
+      data:{ labels, datasets:[{ data:vals, backgroundColor:colors.map(c=>c+'dd'), borderColor:colors, borderWidth:2, hoverOffset:8 }] },
       options:{
         responsive:true, maintainAspectRatio:false,
-        cutout:'68%',
+        cutout:'62%',
         onClick:(_,els)=>{
           if (els&&els.length>0) setExpandedCat(labels[els[0].index]);
         },
@@ -944,7 +967,8 @@ function HomeScreen({ data }) {
             }
           }}
         }
-      }
+      },
+      plugins:[sliceLabelPlugin]
     });
     return ()=>{ if (donutChart.current) donutChart.current.destroy(); };
   }, [JSON.stringify(catTotals)]);
@@ -1020,11 +1044,7 @@ function HomeScreen({ data }) {
             }},
               e('div',{style:{width:10,height:10,borderRadius:3,background:color,flexShrink:0}}),
               e('span',{style:{color:'var(--t2)'}},(ci.e||'')+' '+cat),
-              e('span',{style:{fontWeight:700,color:'var(--t1)',marginLeft:2}},fmt(amt)),
-              e('span',{style:{
-                fontSize:10,fontWeight:700,color:'var(--t3)',
-                background:'var(--s3)',borderRadius:10,padding:'1px 6px',marginLeft:2
-              }},pct+'%')
+              e('span',{style:{fontWeight:700,color:'var(--t1)',marginLeft:2}},fmt(amt))
             );
           });
         })()
