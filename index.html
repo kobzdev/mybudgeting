@@ -1137,10 +1137,10 @@ function PlannerScreen({ data, onDelete, onSave }) {
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
   // Bills for selected month
-  const monthBills = planned.filter(p => {
+  const monthBillsBase = planned.filter(p => {
     const d = new Date(p.due_date);
     return d.getFullYear()===sY && d.getMonth()===sM;
-  }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
+  });
 
   // Paid tracking
   const paidKey = id => `paid_${id}_${sY}_${sM}`;
@@ -1149,6 +1149,14 @@ function PlannerScreen({ data, onDelete, onSave }) {
     const s={};
     planned.forEach(p=>{ s[p.id]=isPaid(p.id); });
     return s;
+  });
+
+  // Sort: unpaid first (by due date), then paid at bottom
+  const monthBills = [...monthBillsBase].sort((a,b)=>{
+    const pA = paidState[a.id] ? 1 : 0;
+    const pB = paidState[b.id] ? 1 : 0;
+    if (pA !== pB) return pA - pB;
+    return new Date(a.due_date) - new Date(b.due_date);
   });
 
   useEffect(()=>{
