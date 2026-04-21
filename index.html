@@ -432,6 +432,7 @@ function AddDrawer({ onClose, onSave }) {
   const [planName, setPlanName] = useState('');
   const [dueDate, setDueDate] = useState(today());
   const [recurring, setRecurring] = useState(false);
+  const [planCat, setPlanCat] = useState('Bills');
   const [err, setErr] = useState('');
 
   const save = () => {
@@ -441,7 +442,7 @@ function AddDrawer({ onClose, onSave }) {
     const base = { id:uid(), amount:amt, created_at:new Date().toISOString() };
     if (type==='expense')  onSave('expenses', {...base, note:notes, category:cat, date});
     if (type==='income')   onSave('income',   {...base, source:notes, date});
-    if (type==='planned')  onSave('planned',  {...base, name:planName.trim(), due_date:dueDate, recurring});
+    if (type==='planned')  onSave('planned',  {...base, name:planName.trim(), due_date:dueDate, recurring, category:planCat});
     onClose();
   };
 
@@ -465,6 +466,12 @@ function AddDrawer({ onClose, onSave }) {
       type==='planned' && e('div',{className:'fg'},
         e('label',{className:'lbl'},'Bill Name'),
         e('input',{className:'inp',type:'text',placeholder:'e.g. Globe Postpaid',value:planName,onChange:ev=>setPlanName(ev.target.value)})
+      ),
+      type==='planned' && e('div',{className:'fg'},
+        e('label',{className:'lbl'},'Category'),
+        e('div',{className:'chips'},
+          CATS.map(c=>e('div',{key:c,className:'chip '+(planCat===c?'on':''),onClick:()=>setPlanCat(c)}, CAT[c].e+' '+c))
+        )
       ),
       (type==='expense') && e('div',{className:'fg'},
         e('label',{className:'lbl'},'Category'),
@@ -847,6 +854,8 @@ function HomeScreen({ data }) {
   const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
   const barRef = useRef(null);
   const barChart = useRef(null);
+  const donutRef = useRef(null);
+  const donutChart = useRef(null);
   const now = new Date();
   const [sY, sM] = viewMode==='range'
     ? [parseInt(rangeMonth.split('-')[0]), parseInt(rangeMonth.split('-')[1])-1]
@@ -897,6 +906,45 @@ function HomeScreen({ data }) {
     return ()=>{ if (barChart.current) barChart.current.destroy(); };
   }, [JSON.stringify(yearMonths)]);
 
+  // ── Donut chart: expenses by category for selected month + paid planned bills ──
+  const catTotals = useMemo(()=>{
+    const totals = {};
+    // Regular expenses for selected month
+    mE.forEach(ex=>{
+      const c = ex.category||'Other';
+      totals[c] = (totals[c]||0) + parseFloat(ex.amount||0);
+    });
+    // Paid planned bills for selected month — use their category
+    mP.filter(p=>isPaidBill(p.id,sY,sM)).forEach(p=>{
+      const c = p.category||'Bills';
+      totals[c] = (totals[c]||0) + parseFloat(p.amount||0);
+    });
+    return totals;
+  }, [JSON.stringify(mE), JSON.stringify(mP), sY, sM]);
+
+  useEffect(()=>{
+    if (!donutRef.current) return;
+    if (donutChart.current) donutChart.current.destroy();
+    const labels = Object.keys(catTotals).sort((a,b)=>catTotals[b]-catTotals[a]);
+    if (!labels.length) return;
+    const vals   = labels.map(c=>catTotals[c]);
+    const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
+    const colors = labels.map((_,i)=>DISTINCT_COLORS[i % DISTINCT_COLORS.length]);
+    donutChart.current = new Chart(donutRef.current,{
+      type:'doughnut',
+      data:{ labels, datasets:[{ data:vals, backgroundColor:colors.map(c=>c+'cc'), borderColor:colors, borderWidth:2, hoverOffset:8 }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        cutout:'68%',
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label: ctx=>`${ctx.label}: ₱${ctx.parsed.toLocaleString()}` } }
+        }
+      }
+    });
+    return ()=>{ if (donutChart.current) donutChart.current.destroy(); };
+  }, [JSON.stringify(catTotals)]);
+
   const insights = getInsights(data);
   const monthLabel = viewMode==='range'
     ? new Date(sY,sM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})
@@ -937,6 +985,32 @@ function HomeScreen({ data }) {
           e('div',{className:'insight-title'},ins.title),
           e('div',{className:'insight-txt'},ins.text)
         )
+      )
+    ),
+    // ── Spending by Category donut ──
+    Object.keys(catTotals).length > 0 && e('div',{className:'yearly-card'},
+      e('div',{className:'yearly-title'},e('span',null,'🍩'),` Spending by Category — ${monthLabel}`),
+      e('div',{style:{position:'relative',height:210}},
+        e('canvas',{ref:donutRef}),
+        e('div',{style:{
+          position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
+          textAlign:'center',pointerEvents:'none'
+        }},
+          e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:800,color:'var(--t1)'}},fmt(Object.values(catTotals).reduce((s,v)=>s+v,0))),
+          e('div',{style:{fontSize:9,color:'var(--t3)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginTop:2}},'Total Spent')
+        )
+      ),
+      e('div',{style:{display:'flex',flexWrap:'wrap',gap:'8px 14px',marginTop:14,justifyContent:'center'}},
+        Object.entries(catTotals).sort((a,b)=>b[1]-a[1]).map(([cat,amt],i)=>{
+          const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
+          const ci = CAT[cat]||CAT.Other;
+          const color = DISTINCT_COLORS[i % DISTINCT_COLORS.length];
+          return e('div',{key:cat,style:{display:'flex',alignItems:'center',gap:6,fontSize:12}},
+            e('div',{style:{width:10,height:10,borderRadius:3,background:color,flexShrink:0}}),
+            e('span',{style:{color:'var(--t2)'}},(ci.e||'')+' '+cat),
+            e('span',{style:{fontWeight:700,color:'var(--t1)',marginLeft:2}},fmt(amt))
+          );
+        })
       )
     ),
     e('div',{className:'yearly-card'},
@@ -1008,7 +1082,7 @@ function PlannerScreen({ data, onDelete, onSave }) {
   };
 
   const renderBill = p => {
-    const ci = { e:'🗓️', bg:'rgba(56,189,248,.12)', c:'#38bdf8' };
+    const ci = p.category && CAT[p.category] ? CAT[p.category] : { e:'🗓️', bg:'rgba(56,189,248,.12)', c:'#38bdf8' };
     const due = new Date(p.due_date);
     const daysLeft = Math.ceil((due - now)/864e5);
     const paid = !!paidState[p.id];
@@ -1023,7 +1097,8 @@ function PlannerScreen({ data, onDelete, onSave }) {
         e('div',{style:{fontSize:14,fontWeight:600,color:'var(--t1)'}},p.name),
         e('div',{style:{fontSize:12,color:'var(--t2)',marginTop:2}},
           fmtD(p.due_date) + (daysLeft>0?` · ${daysLeft}d left`:daysLeft===0?' · Today':' · Past due') +
-          (p.recurring?' · 🔁':'')
+          (p.recurring?' · 🔁':'') +
+          (p.category?` · ${p.category}`:'')
         )
       ),
       e('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,marginRight:8}},
