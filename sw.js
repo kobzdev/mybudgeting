@@ -1,11 +1,11 @@
 /* ============================================================
    MyBudget Service Worker
    HOW TO PUSH UPDATES:
-   Bump CACHE_NAME (e.g. flowo-offline-v1 → flowo-offline-v2)
+   Bump CACHE_NAME (e.g. mybudget-v1 → mybudget-v2)
    That's it — old cache is wiped, fresh files load.
    ============================================================ */
 
-const CACHE_NAME = 'mybudget-v1';
+const CACHE_NAME = 'mybudget-v3';
 
 const ASSETS = [
   '/',
@@ -13,10 +13,10 @@ const ASSETS = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
-  'https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];
 
 /* ── INSTALL: cache assets, activate immediately ── */
@@ -43,15 +43,20 @@ self.addEventListener('activate', event => {
 /* ── FETCH ────────────────────────────────────────────────────────
    index.html  → Network-first (always gets the latest version)
                  Falls back to cache only when offline.
-   Everything else (JS, fonts, icons) → Cache-first (fast loads)
+   Google Fonts → Cache-first with network fallback (caches both
+                  the CSS and the actual .woff2 font files)
+   Everything else (JS, icons) → Cache-first (fast loads)
    ---------------------------------------------------------------- */
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+
+  const url = event.request.url;
 
   const isHTML =
     event.request.destination === 'document' ||
     (event.request.headers.get('accept') || '').includes('text/html');
 
+  /* Network-first for HTML — always gets latest index.html when online */
   if (isHTML) {
     event.respondWith(
       fetch(event.request)
@@ -67,7 +72,24 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  /* Cache-first for JS, CSS, fonts, icons */
+  /* Cache-first for Google Fonts (CSS + woff2 files) */
+  if (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com')) {
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(res => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+          }
+          return res;
+        }).catch(() => cached); // silent fail if font unavailable offline
+      })
+    );
+    return;
+  }
+
+  /* Cache-first for JS, CSS, icons, and everything else */
   event.respondWith(
     caches.match(event.request).then(cached => {
       const networkFetch = fetch(event.request).then(res => {
