@@ -925,6 +925,23 @@ function HomeScreen({ data }) {
     const vals   = labels.map(c=>catTotals[c]);
     const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
     const colors = labels.map((_,i)=>DISTINCT_COLORS[i % DISTINCT_COLORS.length]);
+    const total = vals.reduce((s,v)=>s+v,0);
+    const centerTextPlugin = {
+      id:'centerText',
+      afterDraw(chart){
+        const {ctx,chartArea:{top,bottom,left,right}} = chart;
+        const cx=(left+right)/2, cy=(top+bottom)/2;
+        ctx.save();
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillStyle='#f1f5f9';
+        ctx.font='800 14px Syne,sans-serif';
+        ctx.fillText(fmt(total),cx,cy-8);
+        ctx.fillStyle='#475569';
+        ctx.font='600 9px DM Sans,sans-serif';
+        ctx.fillText('TAP TO EXPAND',cx,cy+10);
+        ctx.restore();
+      }
+    };
     const sliceLabelPlugin = {
       id: 'sliceLabels',
       afterDraw(chart) {
@@ -933,7 +950,7 @@ function HomeScreen({ data }) {
         if (!total) return;
         chart.getDatasetMeta(0).data.forEach((arc, i) => {
           const pct = ((data.datasets[0].data[i] / total) * 100);
-          if (pct < 5) return; // skip tiny slices
+          if (pct < 5) return;
           const angle = (arc.startAngle + arc.endAngle) / 2;
           const r = (arc.innerRadius + arc.outerRadius) / 2;
           const x = arc.x + Math.cos(angle) * r;
@@ -968,7 +985,7 @@ function HomeScreen({ data }) {
           }}
         }
       },
-      plugins:[sliceLabelPlugin]
+      plugins:[centerTextPlugin, sliceLabelPlugin]
     });
     return ()=>{ if (donutChart.current) donutChart.current.destroy(); };
   }, [JSON.stringify(catTotals)]);
@@ -1018,15 +1035,8 @@ function HomeScreen({ data }) {
     // ── Spending by Category donut ──
     Object.keys(catTotals).length > 0 && e('div',{className:'yearly-card'},
       e('div',{className:'yearly-title'},e('span',null,'🍩'),` Spending by Category — ${monthLabel}`),
-      e('div',{style:{position:'relative',height:210,cursor:'pointer'}},
-        e('canvas',{ref:donutRef}),
-        e('div',{style:{
-          position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
-          textAlign:'center',pointerEvents:'none'
-        }},
-          e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:800,color:'var(--t1)'}},fmt(Object.values(catTotals).reduce((s,v)=>s+v,0))),
-          e('div',{style:{fontSize:9,color:'var(--t3)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginTop:2}},'Tap slice to expand')
-        )
+      e('div',{style:{height:220,cursor:'pointer'}},
+        e('canvas',{ref:donutRef,style:{width:'100%',height:'100%'}})
       ),
       e('div',{style:{display:'flex',flexWrap:'wrap',gap:'8px 14px',marginTop:14,justifyContent:'center'}},
         (()=>{
