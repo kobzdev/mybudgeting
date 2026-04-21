@@ -852,6 +852,7 @@ function HomeScreen({ data }) {
   const { income, expenses, planned, paydays } = data;
   const [viewMode, setViewMode] = useState('current');
   const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
+  const [expandedCat, setExpandedCat] = useState(null);
   const barRef = useRef(null);
   const barChart = useRef(null);
   const donutRef = useRef(null);
@@ -906,21 +907,15 @@ function HomeScreen({ data }) {
     return ()=>{ if (barChart.current) barChart.current.destroy(); };
   }, [JSON.stringify(yearMonths)]);
 
-  // ── Donut chart: expenses by category for selected month + paid planned bills ──
+  // ── Donut chart: only mE — paid bills already added to expenses by handlePay ──
   const catTotals = useMemo(()=>{
     const totals = {};
-    // Regular expenses for selected month
     mE.forEach(ex=>{
       const c = ex.category||'Other';
       totals[c] = (totals[c]||0) + parseFloat(ex.amount||0);
     });
-    // Paid planned bills for selected month — use their category
-    mP.filter(p=>isPaidBill(p.id,sY,sM)).forEach(p=>{
-      const c = p.category||'Bills';
-      totals[c] = (totals[c]||0) + parseFloat(p.amount||0);
-    });
     return totals;
-  }, [JSON.stringify(mE), JSON.stringify(mP), sY, sM]);
+  }, [JSON.stringify(mE)]);
 
   useEffect(()=>{
     if (!donutRef.current) return;
@@ -936,6 +931,9 @@ function HomeScreen({ data }) {
       options:{
         responsive:true, maintainAspectRatio:false,
         cutout:'68%',
+        onClick:(_,els)=>{
+          if (els&&els.length>0) setExpandedCat(labels[els[0].index]);
+        },
         plugins:{
           legend:{ display:false },
           tooltip:{ callbacks:{ label: ctx=>`${ctx.label}: ₱${ctx.parsed.toLocaleString()}` } }
@@ -990,14 +988,14 @@ function HomeScreen({ data }) {
     // ── Spending by Category donut ──
     Object.keys(catTotals).length > 0 && e('div',{className:'yearly-card'},
       e('div',{className:'yearly-title'},e('span',null,'🍩'),` Spending by Category — ${monthLabel}`),
-      e('div',{style:{position:'relative',height:210}},
+      e('div',{style:{position:'relative',height:210,cursor:'pointer'}},
         e('canvas',{ref:donutRef}),
         e('div',{style:{
           position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
           textAlign:'center',pointerEvents:'none'
         }},
           e('div',{style:{fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:800,color:'var(--t1)'}},fmt(Object.values(catTotals).reduce((s,v)=>s+v,0))),
-          e('div',{style:{fontSize:9,color:'var(--t3)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginTop:2}},'Total Spent')
+          e('div',{style:{fontSize:9,color:'var(--t3)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginTop:2}},'Tap slice to expand')
         )
       ),
       e('div',{style:{display:'flex',flexWrap:'wrap',gap:'8px 14px',marginTop:14,justifyContent:'center'}},
@@ -1005,7 +1003,12 @@ function HomeScreen({ data }) {
           const DISTINCT_COLORS=['#6ee7b7','#f87171','#38bdf8','#fbbf24','#a78bfa','#f472b6','#34d399','#fb923c','#818cf8','#e879f9','#facc15','#4ade80'];
           const ci = CAT[cat]||CAT.Other;
           const color = DISTINCT_COLORS[i % DISTINCT_COLORS.length];
-          return e('div',{key:cat,style:{display:'flex',alignItems:'center',gap:6,fontSize:12}},
+          return e('div',{key:cat,onClick:()=>setExpandedCat(cat),style:{
+            display:'flex',alignItems:'center',gap:6,fontSize:12,
+            cursor:'pointer',padding:'4px 8px',borderRadius:8,
+            background:expandedCat===cat?'var(--s3)':'transparent',
+            transition:'background .15s'
+          }},
             e('div',{style:{width:10,height:10,borderRadius:3,background:color,flexShrink:0}}),
             e('span',{style:{color:'var(--t2)'}},(ci.e||'')+' '+cat),
             e('span',{style:{fontWeight:700,color:'var(--t1)',marginLeft:2}},fmt(amt))
@@ -1013,6 +1016,49 @@ function HomeScreen({ data }) {
         })
       )
     ),
+    // ── Category drill-down drawer ──
+    expandedCat && (()=>{
+      const ci = CAT[expandedCat]||CAT.Other;
+      const catItems = mE.filter(ex=>(ex.category||'Other')===expandedCat).sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const catTotal = catItems.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+      return e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&setExpandedCat(null)},
+        e('div',{className:'drw'},
+          e('div',{className:'hdl'}),
+          e('div',{className:'drw-head'},
+            e('div',{style:{display:'flex',alignItems:'center',gap:10}},
+              e('div',{style:{
+                width:40,height:40,borderRadius:12,background:ci.bg,
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0
+              }},ci.e),
+              e('div',null,
+                e('div',{className:'drw-title'},expandedCat),
+                e('div',{style:{fontSize:12,color:'var(--t2)',marginTop:1}},`${catItems.length} transaction${catItems.length!==1?'s':''}`)
+              )
+            ),
+            e('button',{className:'drw-cancel',onClick:()=>setExpandedCat(null)},'✕')
+          ),
+          e('div',{style:{
+            background:'var(--s2)',borderRadius:12,padding:'12px 14px',marginBottom:14,
+            display:'flex',justifyContent:'space-between',alignItems:'center'
+          }},
+            e('div',{style:{fontSize:12,color:'var(--t2)',fontWeight:600}},'Total for '+monthLabel),
+            e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:18,color:'var(--red)'}},fmt(catTotal))
+          ),
+          catItems.length===0
+            ? e('div',{className:'empty'},e('div',{className:'eico'},ci.e),e('div',{className:'etxt'},'No transactions in this category.'))
+            : catItems.map(tx=>
+                e('div',{key:tx.id,className:'tx'},
+                  e('div',{className:'txi',style:{background:ci.bg}},ci.e),
+                  e('div',{className:'txn'},
+                    e('div',{className:'txname'},tx.note||'Expense'),
+                    e('div',{className:'txmeta'},fmtD(tx.date))
+                  ),
+                  e('div',{className:'txamt exp'},'-'+fmt(tx.amount))
+                )
+              )
+        )
+      );
+    })(),
     e('div',{className:'yearly-card'},
       e('div',{className:'yearly-title'},e('span',null,'📊'),` ${now.getFullYear()} Yearly Overview`),
       e('div',{className:'yearly-stats'},
