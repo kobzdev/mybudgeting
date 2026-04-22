@@ -227,6 +227,18 @@ select.inp{appearance:none}
 .debt-num-val{font-family:'Syne',sans-serif;font-size:13px;font-weight:700}
 .debt-pbar{height:6px;background:var(--s3);border-radius:3px;overflow:hidden;margin-bottom:10px}
 .debt-pfill{height:100%;border-radius:3px;background:var(--red);transition:width .6s ease}
+/* MOOD EMOJI */
+.mood-emoji{font-size:36px;line-height:1;display:inline-block;margin-left:6px;vertical-align:middle}
+@keyframes mood-angry{0%,100%{transform:rotate(-6deg) scale(1.05)}50%{transform:rotate(6deg) scale(1.1)}}
+@keyframes mood-shake{0%,100%{transform:translateX(0) scale(1.05)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+@keyframes mood-happy{0%,100%{transform:scale(1) rotate(0deg)}30%{transform:scale(1.18) rotate(-8deg)}60%{transform:scale(1.12) rotate(8deg)}}
+@keyframes mood-okay{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes mood-worry{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.mood-angry{animation:mood-angry 0.5s ease-in-out infinite}
+.mood-shake{animation:mood-shake 0.6s ease-in-out infinite}
+.mood-happy{animation:mood-happy 1.2s ease-in-out infinite}
+.mood-okay{animation:mood-okay 1.8s ease-in-out infinite}
+.mood-worry{animation:mood-worry 1.2s ease-in-out infinite}
 /* SETUP SCREEN */
 .setup-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;background:radial-gradient(ellipse at 60% 0%,#1a2e4a,#0a0f1e 60%)}
 .setup-logo{font-family:'Syne',sans-serif;font-size:40px;font-weight:800;letter-spacing:-1.5px;margin-bottom:8px}
@@ -995,6 +1007,15 @@ function HomeScreen({ data }) {
     ? new Date(sY,sM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})
     : now.toLocaleDateString('en-US',{month:'long',year:'numeric'});
 
+  // ── Mood emoji logic ──────────────────────────────────────────────
+  const moodEmoji = (()=>{
+    if (totE > totI)                        return { emoji:'😡', cls:'mood-angry' };
+    if (totI > 0 && totP >= totI * 0.6)    return { emoji:'😰', cls:'mood-shake' };
+    if (totI > 0 && bal >= totI * 0.3)     return { emoji:'😄', cls:'mood-happy' };
+    if (bal > 0)                            return { emoji:'🙂', cls:'mood-okay'  };
+    return                                         { emoji:'😟', cls:'mood-worry' };
+  })();
+
   return e('div',null,
     e('div',{className:'month-toggle'},
       e('button',{className:'mt-btn '+(viewMode==='current'?'on':''),onClick:()=>setViewMode('current')},
@@ -1011,7 +1032,8 @@ function HomeScreen({ data }) {
       e('div',{className:'hero-label'},`Available Balance — ${monthLabel.toUpperCase()}`),
       e('div',{className:'hero-bal'},
         e('span',{className:'hero-bal-sym'},'₱'),
-        new Intl.NumberFormat('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0}).format(bal)
+        new Intl.NumberFormat('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0}).format(bal),
+        e('span',{className:'mood-emoji '+moodEmoji.cls,title:moodEmoji.emoji},moodEmoji.emoji)
       ),
       e('div',{className:'hero-sub'},
         days!==null&&days>0 ? `Payday in ${days} days` : 'Set your payday in Profile'
