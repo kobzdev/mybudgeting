@@ -1835,6 +1835,7 @@ function TxEditForm({ item, tab, onSave, onCancel }) {
     else if (tab==='income') { updated.source=eNote; updated.date=eDate; }
     else if (tab==='planned') { updated.name=eNote; updated.category=eCat; updated.due_date=eDate; }
     onSave(tab, updated);
+    onCancel();
   };
 
   return e('div',{className:'edit-inline',onClick:ev=>ev.stopPropagation()},
