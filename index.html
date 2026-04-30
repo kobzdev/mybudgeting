@@ -1379,10 +1379,15 @@ function HomeScreen({ data }) {
         border:`1px solid ${carryover>=0?'rgba(110,231,183,.2)':'rgba(248,113,113,.2)'}`,
         fontSize:12,color:'var(--t2)',textAlign:'center',fontWeight:600
       }},
-        e('span',{style:{color:carryover>=0?'var(--acc)':'var(--red)'}},
-          (carryover>=0?'+ ':'') + fmt(carryover)
-        ),
-        ' your remaining money from previous months'
+        carryover >= 0
+          ? e('span',null,
+              e('span',{style:{color:'var(--acc)'}}, fmt(carryover)),
+              ' left from previous months added to your available balance'
+            )
+          : e('span',null,
+              e('span',{style:{color:'var(--red)'}}, fmt(Math.abs(carryover))),
+              ' deficit carried over from previous months'
+            )
       )
     ),
     e('div',{className:'sec-hd'},e('span',{className:'sec-hd-ico'},'💡'),e('span',{className:'sec-hd-txt'},'Insights')),
