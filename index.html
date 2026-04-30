@@ -1217,6 +1217,7 @@ function HomeScreen({ data }) {
     : [now.getFullYear(), now.getMonth()];
 
   const inMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()===y&&d.getMonth()===m; };
+  const beforeMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()<y||(d.getFullYear()===y&&d.getMonth()<m); };
   // Helper: check if a planned bill is marked paid for a given year/month
   const isPaidBill=(id,y,m)=>{ try{ return localStorage.getItem(`paid_${id}_${y}_${m}`)==='1'; }catch{return false;} };
   const mI = income.filter(x=>inMonth(x.date,sY,sM));
@@ -1226,7 +1227,11 @@ function HomeScreen({ data }) {
   const totE=mE.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   // Show unpaid planned bills as informational only — they do NOT reduce balance until marked as paid (which adds them to expenses)
   const totP=mP.filter(x=>!isPaidBill(x.id,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const bal = totI-totE;
+  // Carryover: sum all income and expenses from months strictly before the selected month
+  const carryI = income.filter(x=>beforeMonth(x.date,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryE = expenses.filter(x=>beforeMonth(x.date,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryover = carryI - carryE;
+  const bal = carryover + totI - totE;
   const {days} = nextPayday(paydays);
 
   const yearMonths = Array.from({length:12},(_,i)=>{
@@ -1367,6 +1372,17 @@ function HomeScreen({ data }) {
         e('div',{className:'hero-stat'}, e('div',{className:'hero-stat-lbl'},'Income'),    e('div',{className:'hero-stat-val inc'},fmt(totI))),
         e('div',{className:'hero-stat'}, e('div',{className:'hero-stat-lbl'},'Spent'),     e('div',{className:'hero-stat-val exp'},fmt(totE))),
         e('div',{className:'hero-stat'}, e('div',{className:'hero-stat-lbl'},'Upcoming Bills'),   e('div',{className:'hero-stat-val pln'},fmt(totP)))
+      ),
+      carryover !== 0 && e('div',{style:{
+        marginTop:10,padding:'6px 14px',borderRadius:10,
+        background:carryover>=0?'rgba(110,231,183,.08)':'rgba(248,113,113,.08)',
+        border:`1px solid ${carryover>=0?'rgba(110,231,183,.2)':'rgba(248,113,113,.2)'}`,
+        fontSize:12,color:'var(--t2)',textAlign:'center',fontWeight:600
+      }},
+        e('span',{style:{color:carryover>=0?'var(--acc)':'var(--red)'}},
+          (carryover>=0?'+ ':'') + fmt(carryover)
+        ),
+        ' your remaining money from previous months'
       )
     ),
     e('div',{className:'sec-hd'},e('span',{className:'sec-hd-ico'},'💡'),e('span',{className:'sec-hd-txt'},'Insights')),
