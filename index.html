@@ -1217,7 +1217,6 @@ function HomeScreen({ data }) {
     : [now.getFullYear(), now.getMonth()];
 
   const inMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()===y&&d.getMonth()===m; };
-  const beforeMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()<y||(d.getFullYear()===y&&d.getMonth()<m); };
   // Helper: check if a planned bill is marked paid for a given year/month
   const isPaidBill=(id,y,m)=>{ try{ return localStorage.getItem(`paid_${id}_${y}_${m}`)==='1'; }catch{return false;} };
   const mI = income.filter(x=>inMonth(x.date,sY,sM));
@@ -1228,10 +1227,10 @@ function HomeScreen({ data }) {
   // Show unpaid planned bills as informational only — they do NOT reduce balance until marked as paid (which adds them to expenses)
   const totP=mP.filter(x=>!isPaidBill(x.id,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
   // Carryover: sum all income and expenses from months strictly before the selected month
-  const carryI = income.filter(x=>beforeMonth(x.date,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const carryE = expenses.filter(x=>beforeMonth(x.date,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryI = income.filter(x=>{ const d=new Date(x.date); return d.getFullYear()<sY||(d.getFullYear()===sY&&d.getMonth()<sM); }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryE = expenses.filter(x=>{ const d=new Date(x.date); return d.getFullYear()<sY||(d.getFullYear()===sY&&d.getMonth()<sM); }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const carryover = carryI - carryE;
-  const bal = carryover + totI - totE;
+  const bal = totI - totE;
   const {days} = nextPayday(paydays);
 
   const yearMonths = Array.from({length:12},(_,i)=>{
@@ -1382,11 +1381,11 @@ function HomeScreen({ data }) {
         carryover >= 0
           ? e('span',null,
               e('span',{style:{color:'var(--acc)'}}, fmt(carryover)),
-              ' left from previous months added to your available balance'
+              ' left from previous months'
             )
           : e('span',null,
               e('span',{style:{color:'var(--red)'}}, fmt(Math.abs(carryover))),
-              ' deficit carried over from previous months'
+              ' deficit from previous months'
             )
       )
     ),
