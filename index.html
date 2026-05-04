@@ -1204,7 +1204,7 @@ function DebtScreen({ data, onAddDebt, onPayDebt }) {
 // ── HOME / DASHBOARD ──────────────────────────────────────────────
 function HomeScreen({ data }) {
   const { income, expenses, planned, paydays } = data;
-  const [viewMode, setViewMode] = useState('period');
+  const [viewMode, setViewMode] = useState('current');
   const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
   const [expandedCat, setExpandedCat] = useState(null);
   const [homeVis, setHomeVis] = useState(()=>{
@@ -1227,51 +1227,12 @@ function HomeScreen({ data }) {
     : [now.getFullYear(), now.getMonth()];
 
   const inMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()===y&&d.getMonth()===m; };
-
-  // ── Pay Period logic ──
-  const getPayPeriod = () => {
-    const sorted = [...(paydays||[])].sort((a,b)=>a-b);
-    if (!sorted.length) return null;
-    const today = now.getDate(), todayM = now.getMonth(), todayY = now.getFullYear();
-    let startDay = null, startM = todayM, startY = todayY;
-    for (let i = sorted.length-1; i >= 0; i--) {
-      if (sorted[i] <= today) { startDay = sorted[i]; break; }
-    }
-    if (startDay === null) {
-      startDay = sorted[sorted.length-1];
-      const prev = new Date(todayY, todayM-1, 1);
-      startM = prev.getMonth(); startY = prev.getFullYear();
-    }
-    const periodStart = new Date(startY, startM, startDay);
-    periodStart.setHours(0,0,0,0);
-    let endDay = null, endM = todayM, endY = todayY;
-    for (let i = 0; i < sorted.length; i++) {
-      if (sorted[i] > today) { endDay = sorted[i]; break; }
-    }
-    if (endDay === null) {
-      endDay = sorted[0];
-      const nxt = new Date(todayY, todayM+1, 1);
-      endM = nxt.getMonth(); endY = nxt.getFullYear();
-    }
-    const periodEnd = new Date(endY, endM, endDay);
-    periodEnd.setDate(periodEnd.getDate() - 1);
-    periodEnd.setHours(23,59,59,999);
-    const startLbl = periodStart.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    const endLbl   = periodEnd.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    return { periodStart, periodEnd, label: `${startLbl} – ${endLbl}` };
-  };
-  const payPeriod = viewMode==='period' ? getPayPeriod() : null;
-  const inPeriod = (ds) => {
-    if (!payPeriod) return false;
-    const d = new Date(ds); d.setHours(12,0,0,0);
-    return d >= payPeriod.periodStart && d <= payPeriod.periodEnd;
-  };
   const beforeMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()<y||(d.getFullYear()===y&&d.getMonth()<m); };
   // Helper: check if a planned bill is marked paid for a given year/month
   const isPaidBill=(id,y,m)=>{ try{ return localStorage.getItem(`paid_${id}_${y}_${m}`)==='1'; }catch{return false;} };
-  const mI = viewMode==='period' ? income.filter(x=>inPeriod(x.date))   : income.filter(x=>inMonth(x.date,sY,sM));
-  const mE = viewMode==='period' ? expenses.filter(x=>inPeriod(x.date)) : expenses.filter(x=>inMonth(x.date,sY,sM));
-  const mP = viewMode==='period' ? planned.filter(x=>inPeriod(x.due_date)) : planned.filter(x=>inMonth(x.due_date,sY,sM));
+  const mI = income.filter(x=>inMonth(x.date,sY,sM));
+  const mE = expenses.filter(x=>inMonth(x.date,sY,sM));
+  const mP = planned.filter(x=>inMonth(x.due_date,sY,sM));
   const totI=mI.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const totE=mE.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   // Show unpaid planned bills as informational only — they do NOT reduce balance until marked as paid (which adds them to expenses)
@@ -1281,8 +1242,8 @@ function HomeScreen({ data }) {
   const prevY = prevMonthDate.getFullYear();
   const prevM = prevMonthDate.getMonth();
   const prevMonthLabel = prevMonthDate.toLocaleString('default',{month:'long'});
-  const carryI = viewMode==='period' ? 0 : income.filter(x=>{ const d=new Date(x.date); return d.getFullYear()===prevY&&d.getMonth()===prevM; }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const carryE = viewMode==='period' ? 0 : expenses.filter(x=>{ const d=new Date(x.date); return d.getFullYear()===prevY&&d.getMonth()===prevM; }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryI = income.filter(x=>{ const d=new Date(x.date); return d.getFullYear()===prevY&&d.getMonth()===prevM; }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryE = expenses.filter(x=>{ const d=new Date(x.date); return d.getFullYear()===prevY&&d.getMonth()===prevM; }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const carryover = carryI - carryE;
   const bal = totI - totE;
   const {days} = nextPayday(paydays);
@@ -1386,9 +1347,7 @@ function HomeScreen({ data }) {
   }, [JSON.stringify(catTotals)]);
 
   const insights = getInsights(data);
-  const monthLabel = viewMode==='period'
-    ? (payPeriod ? payPeriod.label : 'Pay Period')
-    : viewMode==='range'
+  const monthLabel = viewMode==='range'
     ? new Date(sY,sM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})
     : now.toLocaleDateString('en-US',{month:'long',year:'numeric'});
 
@@ -1406,21 +1365,10 @@ function HomeScreen({ data }) {
       e('button',{className:'mt-btn '+(viewMode==='current'?'on':''),onClick:()=>setViewMode('current')},
         e('span',{className:'mt-btn-ico'},'🗓️'), 'This Month'
       ),
-      e('button',{className:'mt-btn '+(viewMode==='period'?'on':''),onClick:()=>setViewMode('period'),
-        title: paydays?.length ? '' : 'Add paydays in Settings first'},
-        e('span',{className:'mt-btn-ico'},'💰'), 'Pay Period'
-      ),
       e('button',{className:'mt-btn '+(viewMode==='range'?'on':''),onClick:()=>setViewMode('range')},
-        e('span',{className:'mt-btn-ico'},'🗓️'), 'Browse'
+        e('span',{className:'mt-btn-ico'},'🗓️'), 'Browse Months'
       )
     ),
-    viewMode==='period' && !paydays?.length && e('div',{style:{
-      textAlign:'center',fontSize:12,color:'var(--acc4)',padding:'8px',
-      background:'rgba(251,191,36,.07)',borderRadius:10,marginBottom:8
-    }}, '⚠️ Add your payday dates in Settings to use Pay Period view'),
-    viewMode==='period' && payPeriod && e('div',{style:{
-      textAlign:'center',fontSize:11,color:'var(--t3)',marginBottom:8,letterSpacing:.3
-    }}, `📅 ${payPeriod.label}`),
     viewMode==='range' && e('div',{style:{marginBottom:12}},
       e('input',{className:'inp',type:'month',value:rangeMonth,onChange:ev=>setRangeMonth(ev.target.value)})
     ),
