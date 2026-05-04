@@ -1207,6 +1207,16 @@ function HomeScreen({ data }) {
   const [viewMode, setViewMode] = useState('current');
   const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
   const [expandedCat, setExpandedCat] = useState(null);
+  const [homeVis, setHomeVis] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem('homeVis')||'{}'); } catch { return {}; }
+  });
+  const toggleVis = (key) => {
+    setHomeVis(prev => {
+      const next = {...prev, [key]: prev[key]===false ? true : false};
+      localStorage.setItem('homeVis', JSON.stringify(next));
+      return next;
+    });
+  };
   const barRef = useRef(null);
   const barChart = useRef(null);
   const donutRef = useRef(null);
@@ -1217,6 +1227,7 @@ function HomeScreen({ data }) {
     : [now.getFullYear(), now.getMonth()];
 
   const inMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()===y&&d.getMonth()===m; };
+  const beforeMonth=(ds,y,m)=>{ const d=new Date(ds); return d.getFullYear()<y||(d.getFullYear()===y&&d.getMonth()<m); };
   // Helper: check if a planned bill is marked paid for a given year/month
   const isPaidBill=(id,y,m)=>{ try{ return localStorage.getItem(`paid_${id}_${y}_${m}`)==='1'; }catch{return false;} };
   const mI = income.filter(x=>inMonth(x.date,sY,sM));
@@ -1227,8 +1238,12 @@ function HomeScreen({ data }) {
   // Show unpaid planned bills as informational only — they do NOT reduce balance until marked as paid (which adds them to expenses)
   const totP=mP.filter(x=>!isPaidBill(x.id,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
   // Carryover: sum all income and expenses from months strictly before the selected month
-  const carryI = income.filter(x=>{ const d=new Date(x.date); return d.getFullYear()<sY||(d.getFullYear()===sY&&d.getMonth()<sM); }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const carryE = expenses.filter(x=>{ const d=new Date(x.date); return d.getFullYear()<sY||(d.getFullYear()===sY&&d.getMonth()<sM); }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const prevMonthDate = new Date(sY, sM - 1, 1);
+  const prevY = prevMonthDate.getFullYear();
+  const prevM = prevMonthDate.getMonth();
+  const prevMonthLabel = prevMonthDate.toLocaleString('default',{month:'long'});
+  const carryI = income.filter(x=>{ const d=new Date(x.date); return d.getFullYear()===prevY&&d.getMonth()===prevM; }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const carryE = expenses.filter(x=>{ const d=new Date(x.date); return d.getFullYear()===prevY&&d.getMonth()===prevM; }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const carryover = carryI - carryE;
   const bal = totI - totE;
   const {days} = nextPayday(paydays);
@@ -1368,12 +1383,27 @@ function HomeScreen({ data }) {
         days!==null&&days>0 ? `Payday in ${days} days` : 'Set your payday in Profile'
       ),
       e('div',{className:'hero-stats'},
-        e('div',{className:'hero-stat'}, e('div',{className:'hero-stat-lbl'},'Income'),    e('div',{className:'hero-stat-val inc'},fmt(totI))),
-        e('div',{className:'hero-stat'}, e('div',{className:'hero-stat-lbl'},'Spent'),     e('div',{className:'hero-stat-val exp'},fmt(totE))),
-        e('div',{className:'hero-stat'}, e('div',{className:'hero-stat-lbl'},'Upcoming Bills'),   e('div',{className:'hero-stat-val pln'},fmt(totP)))
+        e('div',{className:'hero-stat',onClick:()=>toggleVis('income'),style:{cursor:'pointer',userSelect:'none'}},
+          e('div',{className:'hero-stat-lbl',style:{display:'flex',alignItems:'center',gap:4}},
+            'Income',
+            e('span',{style:{fontSize:11,opacity: homeVis.income===false ? 0.35 : 0.7, transition:'opacity .2s'}}, homeVis.income===false ? '🙈' : '👁️')
+          ),
+          e('div',{className:'hero-stat-val inc'}, homeVis.income===false ? e('span',{style:{letterSpacing:2,opacity:.35}},'••••') : fmt(totI))
+        ),
+        e('div',{className:'hero-stat',onClick:()=>toggleVis('spent'),style:{cursor:'pointer',userSelect:'none'}},
+          e('div',{className:'hero-stat-lbl',style:{display:'flex',alignItems:'center',gap:4}},
+            'Spent',
+            e('span',{style:{fontSize:11,opacity: homeVis.spent===false ? 0.35 : 0.7, transition:'opacity .2s'}}, homeVis.spent===false ? '🙈' : '👁️')
+          ),
+          e('div',{className:'hero-stat-val exp'}, homeVis.spent===false ? e('span',{style:{letterSpacing:2,opacity:.35}},'••••') : fmt(totE))
+        ),
+        e('div',{className:'hero-stat'},
+          e('div',{className:'hero-stat-lbl'},'Upcoming Bills'),
+          e('div',{className:'hero-stat-val pln'},fmt(totP))
+        )
       ),
-      carryover !== 0 && e('div',{style:{
-        marginTop:10,padding:'6px 14px',borderRadius:10,
+      carryover !== 0 && homeVis.carryover !== false && e('div',{onClick:()=>toggleVis('carryover'),style:{
+        marginTop:8,padding:'6px 14px',borderRadius:10,cursor:'pointer',userSelect:'none',
         background:carryover>=0?'rgba(110,231,183,.08)':'rgba(248,113,113,.08)',
         border:`1px solid ${carryover>=0?'rgba(110,231,183,.2)':'rgba(248,113,113,.2)'}`,
         fontSize:12,color:'var(--t2)',textAlign:'center',fontWeight:600
@@ -1381,13 +1411,17 @@ function HomeScreen({ data }) {
         carryover >= 0
           ? e('span',null,
               e('span',{style:{color:'var(--acc)'}}, fmt(carryover)),
-              ' left from previous months'
+              ` left from ${prevMonthLabel}`
             )
           : e('span',null,
               e('span',{style:{color:'var(--red)'}}, fmt(Math.abs(carryover))),
-              ' deficit from previous months'
+              ` deficit from ${prevMonthLabel}`
             )
-      )
+      ),
+      carryover !== 0 && homeVis.carryover === false && e('div',{
+        onClick:()=>toggleVis('carryover'),
+        style:{marginTop:8,textAlign:'center',fontSize:11,color:'var(--t3)',cursor:'pointer',opacity:.5,userSelect:'none'}
+      }, `﹢ prev ${prevMonthLabel} balance`)
     ),
     e('div',{className:'sec-hd'},e('span',{className:'sec-hd-ico'},'💡'),e('span',{className:'sec-hd-txt'},'Insights')),
     insights.map((ins,i)=>
