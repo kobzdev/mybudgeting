@@ -5,7 +5,7 @@
    That's it — old cache is wiped, fresh files load.
    ============================================================ */
 
-const CACHE_NAME = 'mybudget-v8';
+const CACHE_NAME = 'mybudget-v9';
 
 const ASSETS = [
   '/',
