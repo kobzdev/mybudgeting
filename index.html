@@ -1276,7 +1276,7 @@ function HomeScreen({ data, onGoToPlanner }) {
   const totI=mI.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const totE=mE.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   // Show unpaid planned bills as informational only — they do NOT reduce balance until marked as paid (which adds them to expenses)
-  const totP=mP.filter(x=>!isPaidBill(x.id,sY,sM)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const totP=mP.filter(x=>{ const d=new Date(x.due_date); return !isPaidBill(x.id,d.getFullYear(),d.getMonth()); }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
   // Carryover: sum all income and expenses from months strictly before the selected month
   const prevMonthDate = new Date(sY, sM - 1, 1);
   const prevY = prevMonthDate.getFullYear();
@@ -1519,7 +1519,9 @@ function HomeScreen({ data, onGoToPlanner }) {
     ),
     // ── Category drill-down drawer ──
     showPlannedDrawer && (()=>{
-      const drawerBills = mP.sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
+      const drawerBills = mP
+        .filter(x=>{ const d=new Date(x.due_date); return !isPaidBill(x.id,d.getFullYear(),d.getMonth()); })
+        .sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
       const drawerTotal = drawerBills.reduce((s,x)=>s+parseFloat(x.amount||0),0);
       return e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&setShowPlannedDrawer(false)},
         e('div',{className:'drw'},
