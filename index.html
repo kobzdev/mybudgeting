@@ -404,12 +404,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Sans'
 .sec-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;margin-top:4px}
 .sec-hd-ico{font-size:16px}
 .sec-hd-txt{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t2)}
-/* INSIGHT */
-.insight-card{background:linear-gradient(135deg,#0d1f3c,#0f1a2e);border:1px solid rgba(56,189,248,.12);border-radius:var(--r);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;margin-bottom:8px}
-[data-theme="light"] .insight-card{background:linear-gradient(135deg,#e8f4fd,#f0faff);border-color:rgba(56,189,248,.25)}
-.insight-ico{font-size:22px;flex-shrink:0;margin-top:1px}
-.insight-title{font-size:13px;font-weight:700;color:var(--acc2);margin-bottom:2px}
-.insight-txt{font-size:13px;color:var(--t2);line-height:1.5}
+
 /* YEARLY OVERVIEW */
 .yearly-card{background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:16px;margin-bottom:12px}
 .yearly-title{display:flex;align-items:center;gap:6px;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t2);margin-bottom:12px}
@@ -587,6 +582,38 @@ select.inp{appearance:none}
 .setup-logo span{color:var(--acc)}
 .setup-tag{color:#94a3b8;font-size:14px;margin-bottom:36px;text-align:center}
 .setup-card{background:#111827;border:1px solid rgba(255,255,255,0.06);border-radius:22px;padding:28px 22px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+/* VYNELLE CHATBOT */
+.vyn-notif{position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;background:var(--red);border:2px solid var(--bg);animation:pop .3s ease-out}
+.vyn-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:flex-end;justify-content:center;animation:fi .2s}
+.vyn-panel{background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:480px;height:78vh;display:flex;flex-direction:column;animation:su .25s ease-out;overflow:hidden}
+.vyn-head{display:flex;align-items:center;gap:12px;padding:18px 18px 14px;border-bottom:1px solid var(--bdr);flex-shrink:0}
+.vyn-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#a78bfa,#6ee7b7);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 0 0 3px rgba(167,139,250,.2)}
+.vyn-headinfo{flex:1}
+.vyn-name{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--t1)}
+.vyn-status{font-size:11px;color:#6ee7b7;font-weight:600;display:flex;align-items:center;gap:4px}
+.vyn-status::before{content:'';width:6px;height:6px;border-radius:50%;background:#6ee7b7;display:inline-block}
+.vyn-close{background:var(--s2);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.vyn-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.vyn-msgs::-webkit-scrollbar{display:none}
+.vyn-bubble{max-width:80%;padding:11px 14px;border-radius:18px;font-size:14px;line-height:1.5;word-break:break-word;animation:pop .15s ease-out}
+.vyn-bubble.bot{background:var(--s2);border:1px solid var(--bdr);color:var(--t1);align-self:flex-start;border-bottom-left-radius:5px}
+.vyn-bubble.usr{background:var(--acc);color:#0a0f1e;font-weight:600;align-self:flex-end;border-bottom-right-radius:5px}
+.vyn-bubble.typing{background:var(--s2);border:1px solid var(--bdr);align-self:flex-start;display:flex;gap:5px;align-items:center;padding:14px 16px}
+.vyn-dot{width:7px;height:7px;border-radius:50%;background:var(--t3);animation:vbounce .9s ease-in-out infinite}
+.vyn-dot:nth-child(2){animation-delay:.15s}
+.vyn-dot:nth-child(3){animation-delay:.3s}
+@keyframes vbounce{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(-5px);opacity:1}}
+.vyn-quick{display:flex;flex-wrap:wrap;gap:7px;padding:10px 16px 6px;flex-shrink:0}
+.vyn-qbtn{padding:7px 13px;border-radius:20px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.1);color:#a78bfa;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
+.vyn-qbtn:active{background:rgba(167,139,250,.25)}
+.vyn-inputrow{display:flex;gap:10px;padding:12px 16px 32px;flex-shrink:0;border-top:1px solid var(--bdr)}
+.vyn-inp{flex:1;background:var(--s2);border:1px solid var(--bdr);border-radius:22px;padding:11px 16px;color:var(--t1);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+.vyn-inp:focus{border-color:#a78bfa}
+.vyn-inp::placeholder{color:var(--t3)}
+.vyn-send{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#a78bfa,#6ee7b7);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:opacity .15s}
+.vyn-send:active{opacity:.8}
+.vyn-send svg{width:18px;height:18px;stroke:#0a0f1e;stroke-width:2.5;fill:none}
+.vyn-date-sep{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);padding:4px 0}
 </style>
 </head>
 <body>
@@ -649,32 +676,6 @@ function nextPayday(paydays) {
     if (diff < bd) { bd=diff; best=dt; }
   }
   return { days:bd, date:best };
-}
-
-function getInsights(data) {
-  const { income, expenses, planned, paydays } = data;
-  const now = new Date();
-  const mExp = expenses.filter(ex=>{ const d=new Date(ex.date); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); });
-  const totI = income.reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const totE = expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const _isPaid=(id)=>{ try{ const now2=new Date(); return localStorage.getItem(`paid_${id}_${now2.getFullYear()}_${now2.getMonth()}`)==='1'; }catch{return false;} };
-  const totP = planned.filter(x=>{ const d=new Date(x.due_date); return d.getMonth()!==now.getMonth()||d.getFullYear()!==now.getFullYear()||!_isPaid(x.id); }).reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const rem  = totI-totE;
-  const { days } = nextPayday(paydays);
-  const catTot={};
-  mExp.forEach(ex=>{ catTot[ex.category]=(catTot[ex.category]||0)+parseFloat(ex.amount||0); });
-  const topCat = Object.entries(catTot).sort((a,b)=>b[1]-a[1])[0];
-  const savRate = totI>0?((totI-totE)/totI)*100:0;
-  const out=[];
-  if (savRate>=20) out.push({icon:'🎉',title:'Great Savings Rate!',text:`You're saving ${savRate.toFixed(0)}% of your income. Keep it up!`});
-  else if (savRate>0&&totI>0) out.push({icon:'💡',title:'Boost Your Savings',text:`Saving ${savRate.toFixed(0)}% right now. Try cutting one expense to reach 20%.`});
-  if (topCat) out.push({icon:'🔍',title:`Top Spend: ${topCat[0]}`,text:`${fmt(topCat[1])} on ${topCat[0]} this month.${topCat[1]>totI*0.3?' That\'s over 30% of income!':''}`});
-  if (days!==null&&days>0&&rem>0) out.push({icon:'🗓️',title:'Daily Budget',text:`You can spend ${fmt(rem/days)}/day until payday in ${days} days.`});
-  if (rem<0) out.push({icon:'🚨',title:'Over Budget!',text:`You're ${fmt(Math.abs(rem))} over budget. Consider cutting non-essential expenses.`});
-  const urgent = planned.filter(p=>Math.ceil((new Date(p.due_date)-now)/864e5)<=7&&Math.ceil((new Date(p.due_date)-now)/864e5)>=0);
-  if (urgent.length>0) out.push({icon:'⚠️',title:'Bills Due Soon',text:`${urgent.length} bill${urgent.length>1?'s':''} due within 7 days totalling ${fmt(urgent.reduce((s,p)=>s+parseFloat(p.amount||0),0))}.`});
-  if (!out.length) out.push({icon:'✨',title:'All Good!',text:'Add transactions to unlock personalised spending insights here.'});
-  return out;
 }
 
 // ── PIN MODAL ─────────────────────────────────────────────────────
@@ -1388,7 +1389,6 @@ function HomeScreen({ data, onGoToPlanner }) {
     return ()=>{ if (donutChart.current) donutChart.current.destroy(); };
   }, [JSON.stringify(catTotals)]);
 
-  const insights = getInsights(data);
   const monthLabel = viewMode==='period'
     ? (payPeriod ? payPeriod.label : 'Pay Period')
     : viewMode==='range'
@@ -1480,16 +1480,6 @@ function HomeScreen({ data, onGoToPlanner }) {
         onClick:()=>toggleVis('carryover'),
         style:{marginTop:8,textAlign:'center',fontSize:11,color:'var(--t3)',cursor:'pointer',opacity:.5,userSelect:'none'}
       }, `﹢ prev ${prevMonthLabel} balance`)
-    ),
-    e('div',{className:'sec-hd'},e('span',{className:'sec-hd-ico'},'💡'),e('span',{className:'sec-hd-txt'},'Insights')),
-    insights.map((ins,i)=>
-      e('div',{key:i,className:'insight-card'},
-        e('div',{className:'insight-ico'},ins.icon),
-        e('div',null,
-          e('div',{className:'insight-title'},ins.title),
-          e('div',{className:'insight-txt'},ins.text)
-        )
-      )
     ),
     // ── Spending by Category donut ──
     Object.keys(catTotals).length > 0 && e('div',{className:'yearly-card'},
@@ -2280,7 +2270,7 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
   const [name, setName]     = useState(()=>pref.get('display_name')||'');
   const [editName, setEditName] = useState(false);
   const [pdInput, setPdInput]   = useState('');
-  // flow: null | 'manage' | 'pin-gate' | 'pin-set-first' | 'pin-set' | 'pin-change'
+  // flow: null | 'manage' | 'pin-gate' | 'pin-set-first' | 'pin-set' | 'pin-change' | 'log'
   const [flow, setFlow] = useState(null);
   const [hasPin, setHasPin] = useState(()=>!!pref.get('pin'));
   const [photoSrc, setPhotoSrc] = useState(()=>pref.get('photo')||null);
@@ -2453,6 +2443,25 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
         e('button',{className:'tog '+(theme==='dark'?'on':''),onClick:toggleTheme})
       )
     ),
+    // Transaction Log
+    e('div',{className:'slbl'},'Transaction History'),
+    e('div',{className:'card card-sm',style:{marginBottom:12}},
+      e('div',{className:'mi',onClick:()=>setFlow('log')},
+        e('div',{className:'mi-ico',style:{background:'rgba(110,231,183,.12)'}},
+          e('svg',{width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'var(--acc)',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+            e('path',{d:'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'}),
+            e('polyline',{points:'14,2 14,8 20,8'}),
+            e('line',{x1:16,y1:13,x2:8,y2:13}),
+            e('line',{x1:16,y1:17,x2:8,y2:17})
+          )
+        ),
+        e('div',{className:'mi-info'},
+          e('div',{className:'mi-lbl'},'View Transaction Log'),
+          e('div',{className:'mi-sub'},`${(data.income||[]).length+(data.expenses||[]).length} transactions recorded`)
+        ),
+        e('span',{className:'mi-arr'},'›')
+      )
+    ),
     // Payday Schedule
     e('div',{className:'slbl'},'Payday Schedule'),
     e('div',{className:'card card-sm',style:{marginBottom:12}},
@@ -2557,7 +2566,306 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
     flow==='pin-change' && e(PinModal,{mode:'change',
       onSuccess:()=>setFlow(null),
       onCancel:()=>setFlow(null)
-    })
+    }),
+    // Transaction Log from settings
+    flow==='log' && e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&setFlow(null)},
+      e('div',{className:'drw',style:{paddingBottom:32,maxHeight:'90vh'}},
+        e('div',{className:'hdl'}),
+        e('div',{className:'drw-head'},
+          e('div',{className:'drw-title'},'Transaction Log'),
+          e('button',{className:'drw-cancel',onClick:()=>setFlow(null)},'✕ Close')
+        ),
+        e(LogScreen,{data, onDelete:()=>{}})
+      )
+    )
+  );
+}
+
+// ── VYNELLE CHATBOT ───────────────────────────────────────────────
+const VYNELLE_GREET = name => [
+  `Hi${name?' '+name:''}! 👋 I'm **Vynelle**, your personal finance buddy.`,
+  `I work fully offline and can analyze your budget, spending habits, debts, and more.`,
+  `What would you like to know?`
+].join('\n');
+
+function vynelleReply(input, data) {
+  const q = input.toLowerCase().trim();
+  const { income=[], expenses=[], planned=[], goals=[], debts=[], paydays=[] } = data||{};
+
+  const totI  = income.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const totE  = expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const bal   = totI - totE;
+  const now   = new Date();
+
+  const mExp = expenses.filter(x=>{ const d=new Date(x.date); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); });
+  const mInc = income.filter(x=>{ const d=new Date(x.date||x.created_at); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); });
+  const mTotE = mExp.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const mTotI = mInc.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+
+  const catTot={};
+  mExp.forEach(x=>{ catTot[x.category]=(catTot[x.category]||0)+parseFloat(x.amount||0); });
+  const topCat = Object.entries(catTot).sort((a,b)=>b[1]-a[1]);
+
+  const fmtP = n => '₱'+new Intl.NumberFormat('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+
+  const activeDebts = debts.filter(d=>d.remaining>0);
+  const totalDebt   = activeDebts.reduce((s,d)=>s+parseFloat(d.remaining||0),0);
+  const monthlyDebt = activeDebts.reduce((s,d)=>s+parseFloat(d.monthly||0),0);
+
+  const pendingGoals = goals.filter(g=>g.current_amount<g.target_amount);
+  const goalPct = g => g.target_amount>0?(g.current_amount/g.target_amount*100).toFixed(0):0;
+
+  const billsDueSoon = planned.filter(p=>{ const diff=Math.ceil((new Date(p.due_date)-now)/864e5); return diff>=0&&diff<=7; });
+
+  const { days:pdDays } = nextPayday(paydays);
+  const savRate = totI>0?((totI-totE)/totI*100):0;
+
+  // greeting
+  if (/^(hi|hello|hey|helo|kamusta|sup|yo)\b/.test(q))
+    return `Hey! 😊 I'm Vynelle. Ask me about your balance, spending, debts, goals, or bills — I'll give you the real picture.`;
+
+  // balance
+  if (/balance|remaining|left|natira|available/.test(q)) {
+    if (totI===0&&totE===0) return `You haven't recorded any income or expenses yet. Tap **+** to add your first transaction!`;
+    const mood = bal<0?'😬':bal>totI*0.3?'😊':'🙂';
+    return `Your current balance is **${fmtP(bal)}** ${mood}\n\n• Total income: ${fmtP(totI)}\n• Total expenses: ${fmtP(totE)}\n${pdDays?`• Days until payday: ${pdDays}`:''}`;
+  }
+
+  // this month
+  if (/this month|ngayong buwan|monthly|current month/.test(q)) {
+    if (mTotI===0&&mTotE===0) return `No transactions recorded this month yet. Start tracking to get insights!`;
+    return `**This month's summary:**\n\n• Income: ${fmtP(mTotI)}\n• Expenses: ${fmtP(mTotE)}\n• Net: ${fmtP(mTotI-mTotE)}\n${topCat.length?`• Top spend: ${topCat[0][0]} (${fmtP(topCat[0][1])})`:''}`; 
+  }
+
+  // spending categories
+  if (/spend|spent|expense|gastos|category|categories/.test(q)) {
+    if (!topCat.length) return `No expenses recorded yet. Add some to see your spending breakdown.`;
+    const lines = topCat.slice(0,5).map(([c,v],i)=>`${i+1}. ${c}: ${fmtP(v)}`).join('\n');
+    return `**Top spending categories this month:**\n\n${lines}\n\nTotal: ${fmtP(mTotE)}`;
+  }
+
+  // savings rate
+  if (/saving|savings rate|save|ipon/.test(q)) {
+    if (totI===0) return `Add some income first so I can calculate your savings rate! 💰`;
+    const msg = savRate>=20
+      ? `🎉 Amazing! You're saving **${savRate.toFixed(0)}%** of your income. You're on track!`
+      : savRate>0
+        ? `You're saving **${savRate.toFixed(0)}%** of your income. Financial experts recommend saving at least 20%. Try cutting one expense category!`
+        : `Uh-oh — you're spending more than you earn 😬. Your expenses exceed income by **${fmtP(Math.abs(bal))}**.`;
+    return msg;
+  }
+
+  // debt
+  if (/debt|utang|loan|credit|borrow/.test(q)) {
+    if (!activeDebts.length) return `🎊 You have no active debts! Great financial health.`;
+    const lines = activeDebts.map(d=>`• ${d.name}: ${fmtP(d.remaining)} left (${fmtP(d.monthly)}/mo)`).join('\n');
+    return `**Your active debts:**\n\n${lines}\n\nTotal remaining: **${fmtP(totalDebt)}**\nMonthly payments: ${fmtP(monthlyDebt)}`;
+  }
+
+  // goals
+  if (/goal|target|saving for|ipon para|dream/.test(q)) {
+    if (!goals.length) return `No savings goals yet! Tap the **Goals** tab to set one. 🎯`;
+    if (!pendingGoals.length) return `🥳 All your goals are complete! Set a new one in the Goals tab.`;
+    const lines = pendingGoals.map(g=>`• ${g.icon||'🎯'} ${g.name}: ${goalPct(g)}% — ${fmtP(g.current_amount)} / ${fmtP(g.target_amount)}`).join('\n');
+    return `**Your active goals:**\n\n${lines}`;
+  }
+
+  // bills
+  if (/bill|bayarin|due|subscription|rent|utility/.test(q)) {
+    if (!planned.length) return `No bills recorded. Add recurring bills in the **Planner** tab so I can remind you!`;
+    const soon = billsDueSoon.length ? `\n\n⚠️ ${billsDueSoon.length} bill${billsDueSoon.length>1?'s':''} due this week: `+billsDueSoon.map(b=>b.name).join(', ') : '';
+    const totalBills = planned.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+    return `You have **${planned.length}** tracked bill${planned.length>1?'s':''} totalling **${fmtP(totalBills)}**.${soon}`;
+  }
+
+  // payday
+  if (/payday|sweldo|salary day|pay day/.test(q)) {
+    if (!paydays.length) return `Set your payday in **Settings → Payday Schedule** and I'll tell you how many days are left!`;
+    return pdDays===1
+      ? `🎉 Payday is **tomorrow**!`
+      : pdDays
+        ? `💼 Your next payday is in **${pdDays} days**.${bal>0&&pdDays?` Budget: ${fmtP(bal/pdDays)}/day until then.`:''}`
+        : `Payday is **today**! 🥳`;
+  }
+
+  // income
+  if (/income|suweldo|salary|earnings|earn|kumita/.test(q)) {
+    if (!income.length) return `No income recorded yet. Add your salary or other income with the **+** button!`;
+    return `**Total income recorded:** ${fmtP(totI)}\n**This month:** ${fmtP(mTotI)}\n\nYou've recorded ${income.length} income transaction${income.length>1?'s':''}.`;
+  }
+
+  // budget tip
+  if (/tip|advice|suggest|help|tulong|how to|improve|budget/.test(q)) {
+    const tips = [];
+    if (savRate<20&&totI>0) tips.push(`📌 Try the 50/30/20 rule: 50% needs, 30% wants, 20% savings.`);
+    if (topCat[0]&&topCat[0][1]>totI*0.3) tips.push(`📌 ${topCat[0][0]} is taking ${(topCat[0][1]/totI*100).toFixed(0)}% of your income — consider reducing it.`);
+    if (activeDebts.length) tips.push(`📌 You have ${activeDebts.length} active debt${activeDebts.length>1?'s':''}. Prioritize paying off the one with the highest interest first.`);
+    if (pendingGoals.length) tips.push(`📌 Keep contributing to your goals — even small amounts add up!`);
+    if (!tips.length) tips.push(`📌 You're doing well! Stay consistent with tracking your transactions.`);
+    return `**Financial tips for you:**\n\n${tips.join('\n')}`;
+  }
+
+  // log / history
+  if (/log|history|transactions|lahat|recent|last/.test(q)) {
+    const total = income.length+expenses.length;
+    if (!total) return `No transactions yet. Tap **+** to log your first one!`;
+    const recent = [...income.map(x=>({...x,type:'income'})),...expenses.map(x=>({...x,type:'expense'}))]
+      .sort((a,b)=>new Date(b.date||b.created_at)-new Date(a.date||a.created_at)).slice(0,3);
+    const lines = recent.map(x=>x.type==='income'?`• +${fmtP(x.amount)} — ${x.source||'Income'}`:
+      `• -${fmtP(x.amount)} — ${x.note||x.category||'Expense'}`).join('\n');
+    return `You have **${total} transactions** recorded.\n\n**Recent:**\n${lines}\n\nGo to the **Log** tab to see everything.`;
+  }
+
+  // insights / overview
+  if (/insight|overview|summary|how am i doing|financial health|report|lahat ng|kumusta.*budget/.test(q)) {
+    const out = [];
+    if (totI===0&&totE===0) return `No data yet! Add income and expenses first, then ask me for insights. 💡`;
+    if (savRate>=20) out.push(`🎉 **Great savings rate!** You're keeping ${savRate.toFixed(0)}% of your income — well above the 20% benchmark.`);
+    else if (savRate>0&&totI>0) out.push(`💡 **Savings rate:** ${savRate.toFixed(0)}%. Try to reach 20% by trimming one expense category.`);
+    else if (totI>0) out.push(`🚨 **Over budget!** You're spending ${fmtP(Math.abs(bal))} more than you earn. Cut non-essentials now.`);
+    if (topCat.length) {
+      const [cat,amt] = topCat[0];
+      out.push(`🔍 **Top spend this month:** ${cat} at ${fmtP(amt)}${totI>0&&amt>totI*0.3?' — that\'s over 30% of your income!':''}.`);
+    }
+    if (pdDays&&pdDays>0&&bal>0) out.push(`🗓️ **Daily budget:** You can spend ${fmtP(Math.floor(bal/pdDays))}/day until payday in ${pdDays} day${pdDays>1?'s':''}.`);
+    if (billsDueSoon.length) out.push(`⚠️ **Bills due soon:** ${billsDueSoon.map(b=>b.name).join(', ')} within 7 days — total ${fmtP(billsDueSoon.reduce((s,b)=>s+parseFloat(b.amount||0),0))}.`);
+    if (activeDebts.length) out.push(`💳 **Active debts:** ${activeDebts.length} debt${activeDebts.length>1?'s':''} totalling ${fmtP(totalDebt)} (${fmtP(monthlyDebt)}/mo payments).`);
+    if (pendingGoals.length) out.push(`🎯 **Goals in progress:** ${pendingGoals.length} goal${pendingGoals.length>1?'s':{}}. Keep contributing — every peso counts!`);
+    if (!out.length) out.push(`✨ Everything looks good! Keep tracking to unlock more insights.`);
+    return out.join('\n\n');
+  }
+
+  // who are you
+  if (/who are you|what are you|vynelle|chatbot|ai|bot/.test(q))
+    return `I'm **Vynelle** 💜 — your offline AI finance buddy built into MyBudget!\n\nI analyze your actual data (income, expenses, debts, goals) and give you personalized insights. I work 100% offline — your data never leaves your device.`;
+
+  // thanks
+  if (/thank|thanks|salamat|ty\b/.test(q))
+    return `You're welcome! 😊 Ask me anything about your finances anytime.`;
+
+  // bye
+  if (/bye|goodbye|later|sige|exit/.test(q))
+    return `Take care! 👋 Come back anytime you want to check on your finances.`;
+
+  // fallback
+  const suggestions = ['balance','this month','spending','debts','goals','bills','savings rate','payday','tips'];
+  return `I'm not sure about that, but I can help with: **${suggestions.slice(0,4).join(', ')}**, and more.\n\nTry asking: *"What's my balance?"* or *"Give me budget tips."*`;
+}
+
+function VynelleChat({ data, onClose }) {
+  const name = pref.get('display_name')||'';
+  const STORAGE_KEY = 'vynelle_chat_history';
+
+  const loadHistory = () => {
+    try { const r=localStorage.getItem(STORAGE_KEY); return r?JSON.parse(r):[]; } catch { return []; }
+  };
+  const saveHistory = msgs => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-60))); } catch {}
+  };
+
+  const [msgs, setMsgs] = useState(()=>{
+    const h = loadHistory();
+    if (h.length===0) return [{ id:uid(), role:'bot', text:VYNELLE_GREET(name), ts:Date.now() }];
+    return h;
+  });
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(false);
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(()=>{ endRef.current?.scrollIntoView({behavior:'smooth'}); },[msgs, typing]);
+
+  const send = txt => {
+    const text = (txt||input).trim();
+    if (!text) return;
+    const userMsg = { id:uid(), role:'usr', text, ts:Date.now() };
+    const next = [...msgs, userMsg];
+    setMsgs(next);
+    setInput('');
+    setTyping(true);
+    setTimeout(()=>{
+      const reply = vynelleReply(text, data);
+      const botMsg = { id:uid(), role:'bot', text:reply, ts:Date.now() };
+      const final = [...next, botMsg];
+      setMsgs(final);
+      saveHistory(final);
+      setTyping(false);
+    }, 600 + Math.random()*400);
+  };
+
+  const clearHistory = () => {
+    const fresh = [{ id:uid(), role:'bot', text:VYNELLE_GREET(name), ts:Date.now() }];
+    setMsgs(fresh);
+    saveHistory(fresh);
+  };
+
+  const renderText = txt => {
+    // Bold markdown and newlines
+    const parts = txt.split('\n');
+    return parts.map((line,i)=>{
+      const segs = line.split(/(\*\*[^*]+\*\*)/g);
+      return e('span',{key:i},
+        segs.map((s,j)=> s.startsWith('**')&&s.endsWith('**')
+          ? e('strong',{key:j,style:{color:'inherit'}},s.slice(2,-2))
+          : e('span',{key:j},s)
+        ),
+        i<parts.length-1 && e('br',{key:'br'+i})
+      );
+    });
+  };
+
+  const quickReplies = ['Insights','My balance','This month','Spending','Debts','Goals','Tips'];
+
+  return e('div',{className:'vyn-overlay',onClick:ev=>ev.target.className==='vyn-overlay'&&onClose()},
+    e('div',{className:'vyn-panel'},
+      // Header
+      e('div',{className:'vyn-head'},
+        e('div',{className:'vyn-avatar'},'🌸'),
+        e('div',{className:'vyn-headinfo'},
+          e('div',{className:'vyn-name'},'Vynelle'),
+          e('div',{className:'vyn-status'},'Online • Offline AI')
+        ),
+        e('button',{
+          onClick:clearHistory,
+          style:{background:'none',border:'none',color:'var(--t3)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif",marginRight:8,padding:'6px 8px',borderRadius:8}
+        },'Clear'),
+        e('button',{className:'vyn-close',onClick:onClose},'✕ Close')
+      ),
+      // Messages
+      e('div',{className:'vyn-msgs'},
+        msgs.map((m,i)=>{
+          const isNewDay = i===0||new Date(m.ts).toDateString()!==new Date(msgs[i-1].ts).toDateString();
+          return e('div',{key:m.id},
+            isNewDay && e('div',{className:'vyn-date-sep'},
+              new Date(m.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+            ),
+            e('div',{className:'vyn-bubble '+m.role},renderText(m.text))
+          );
+        }),
+        typing && e('div',{className:'vyn-bubble typing',key:'typing'},
+          e('div',{className:'vyn-dot'}),e('div',{className:'vyn-dot'}),e('div',{className:'vyn-dot'})
+        ),
+        e('div',{ref:endRef})
+      ),
+      // Quick replies
+      e('div',{className:'vyn-quick'},
+        quickReplies.map(q=>e('button',{key:q,className:'vyn-qbtn',onClick:()=>send(q)},q))
+      ),
+      // Input
+      e('div',{className:'vyn-inputrow'},
+        e('input',{
+          ref:inputRef,
+          className:'vyn-inp',
+          placeholder:'Ask Vynelle anything…',
+          value:input,
+          onChange:ev=>setInput(ev.target.value),
+          onKeyDown:ev=>ev.key==='Enter'&&send()
+        }),
+        e('button',{className:'vyn-send',onClick:()=>send()},
+          e('svg',{viewBox:'0 0 24 24'},e('line',{x1:22,y1:2,x2:11,y2:13}),e('polygon',{points:'22 2 15 22 11 13 2 9 22 2'}))
+        )
+      )
+    )
   );
 }
 
@@ -2585,6 +2893,7 @@ function App() {
   const [showAdd, setShowAdd]   = useState(false);
   const [showSignOut, setShowSignOut] = useState(false);
   const [showExitPrompt, setShowExitPrompt] = useState(false);
+  const [showVynelle, setShowVynelle] = useState(false);
   const exitTapRef = useRef(null);
 
   // Push a history entry once on mount so back button can be intercepted
@@ -2730,7 +3039,6 @@ function App() {
     debt:    e(DebtScreen,    {data, onAddDebt:handleAddDebt, onPayDebt:handlePayDebt, onDeleteDebt:handleDeleteDebt}),
     planner: e(PlannerScreen, {data, onDelete:handleDelete, onSave:handleSave}),
     goals:   e(GoalsScreen,   {data, onAddGoal:g=>handleSave('goals',g), onDelete:handleDelete, onContribute:handleContrib}),
-    log:     e(LogScreen,     {data, onDelete:handleDelete}),
     profile: e(ProfileScreen, {data, onUpdate:handleUpdate, onClearTx:handleClearTx, onResetAll:handleResetAll, onSignOut:()=>setShowSignOut(true)})
   };
 
@@ -2771,10 +3079,14 @@ function App() {
         e('button',{className:'ni '+(tab==='home'?'on':''),   onClick:()=>setTab('home')},   IC.home, e('span',{className:'nl'},'Home')),
         e('button',{className:'ni '+(tab==='planner'?'on':''),onClick:()=>setTab('planner')},IC.plan, e('span',{className:'nl'},'Planner')),
         e('button',{className:'ni '+(tab==='goals'?'on':''),  onClick:()=>setTab('goals')},  IC.goal, e('span',{className:'nl'},'Goals')),
-        e('button',{className:'ni '+(tab==='log'?'on':''),    onClick:()=>setTab('log')},    IC.log,  e('span',{className:'nl'},'Log'))
+        e('button',{className:'ni '+(showVynelle?'on':''),style:{position:'relative'},onClick:()=>setShowVynelle(true)},
+          e('span',{style:{fontSize:18,lineHeight:1}},'🌸'),
+          e('span',{className:'nl'},'Vynelle')
+        )
       )
     ),
     e('button',{className:'nadd',onClick:()=>setShowAdd(true)},IC.plus),
+    showVynelle && e(VynelleChat,{data, onClose:()=>setShowVynelle(false)}),
     showAdd && e(AddDrawer,{onClose:()=>setShowAdd(false), onSave:handleSave}),
     showSignOut && e('div',{className:'ov-center'},
       e('div',{className:'modal'},
