@@ -1205,7 +1205,7 @@ function DebtScreen({ data, onAddDebt, onPayDebt }) {
 // ── HOME / DASHBOARD ──────────────────────────────────────────────
 function HomeScreen({ data, onGoToPlanner }) {
   const { income, expenses, planned, paydays } = data;
-  const [viewMode, setViewMode] = useState('current');
+  const [viewMode, setViewMode] = useState('period');
   const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
   const [expandedCat, setExpandedCat] = useState(null);
   const [showPlannedDrawer, setShowPlannedDrawer] = useState(false);
@@ -1291,37 +1291,90 @@ function HomeScreen({ data, onGoToPlanner }) {
   const bal = totI - totE;
   const {days} = nextPayday(paydays);
 
-  const yearMonths = Array.from({length:12},(_,i)=>{
+  // ── Interactive chart state ───────────────────────────────────────
+  const [chartRange, setChartRange] = useState('year');   // 'year' | 'last6'
+  const [chartMode, setChartMode]  = useState('bar');     // 'bar' | 'line'
+  const [chartFilters, setChartFilters] = useState({income:true,spent:true,planned:true,net:false});
+  const toggleFilter = k => setChartFilters(prev=>({...prev,[k]:!prev[k]}));
+
+  const allMonths = Array.from({length:12},(_,i)=>{
     const lbl=new Date(now.getFullYear(),i,1).toLocaleDateString('en-PH',{month:'short'});
     const inc=income.filter(x=>inMonth(x.date,now.getFullYear(),i)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
     const exp=expenses.filter(x=>inMonth(x.date,now.getFullYear(),i)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
     const pln=planned.filter(x=>inMonth(x.due_date,now.getFullYear(),i)&&localStorage.getItem(`paid_${x.id}_${now.getFullYear()}_${i}`)!=='1').reduce((s,x)=>s+parseFloat(x.amount||0),0);
-    return {lbl,inc,exp,pln};
+    return {lbl,inc,exp,pln,net:inc-exp,monthIdx:i};
   });
+
+  const yearMonths = chartRange==='last6'
+    ? (()=>{
+        const curM=now.getMonth();
+        return Array.from({length:6},(_,i)=>{
+          const mIdx=((curM-5+i)+12)%12;
+          const yr=mIdx>curM?now.getFullYear()-1:now.getFullYear();
+          const lbl=new Date(yr,mIdx,1).toLocaleDateString('en-PH',{month:'short'});
+          const inc=income.filter(x=>inMonth(x.date,yr,mIdx)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+          const exp=expenses.filter(x=>inMonth(x.date,yr,mIdx)).reduce((s,x)=>s+parseFloat(x.amount||0),0);
+          const pln=planned.filter(x=>inMonth(x.due_date,yr,mIdx)&&localStorage.getItem(`paid_${x.id}_${yr}_${mIdx}`)!=='1').reduce((s,x)=>s+parseFloat(x.amount||0),0);
+          return {lbl,inc,exp,pln,net:inc-exp};
+        });
+      })()
+    : allMonths;
+
   const yI=yearMonths.reduce((s,m)=>s+m.inc,0);
   const yE=yearMonths.reduce((s,m)=>s+m.exp,0);
   const yN=yI-yE;
 
+  const CHART_SERIES = [
+    {key:'income',  label:'Income',  color:'rgba(110,231,183,.8)',  colorLine:'#6ee7b7', data:m=>m.inc},
+    {key:'spent',   label:'Spent',   color:'rgba(248,113,113,.8)',  colorLine:'#f87171', data:m=>m.exp},
+    {key:'planned', label:'Planned', color:'rgba(251,191,36,.65)',  colorLine:'#fbbf24', data:m=>m.pln},
+    {key:'net',     label:'Net',     color:'rgba(167,139,250,.8)',  colorLine:'#a78bfa', data:m=>m.net},
+  ];
+
   useEffect(()=>{
     if (!barRef.current) return;
     if (barChart.current) barChart.current.destroy();
+    const activeDS = CHART_SERIES.filter(s=>chartFilters[s.key]);
+    const datasets = activeDS.map(s=>({
+      label: s.label,
+      data: yearMonths.map(s.data),
+      backgroundColor: chartMode==='bar' ? s.color : 'transparent',
+      borderColor: s.colorLine,
+      borderWidth: chartMode==='line' ? 2.5 : 0,
+      borderRadius: chartMode==='bar' ? 5 : 0,
+      borderSkipped: false,
+      pointBackgroundColor: s.colorLine,
+      pointRadius: chartMode==='line' ? 4 : 0,
+      pointHoverRadius: chartMode==='line' ? 6 : 0,
+      tension: 0.35,
+      fill: chartMode==='line' ? false : undefined,
+    }));
     barChart.current = new Chart(barRef.current,{
-      type:'bar',
-      data:{
-        labels:yearMonths.map(m=>m.lbl),
-        datasets:[
-          {label:'Income',data:yearMonths.map(m=>m.inc),backgroundColor:'rgba(110,231,183,.7)',borderRadius:4,borderSkipped:false},
-          {label:'Spent', data:yearMonths.map(m=>m.exp),backgroundColor:'rgba(248,113,113,.7)',borderRadius:4,borderSkipped:false},
-          {label:'Planned',data:yearMonths.map(m=>m.pln),backgroundColor:'rgba(251,191,36,.5)',borderRadius:4,borderSkipped:false}
-        ]
-      },
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
-        x:{ticks:{color:'#475569',font:{size:10}},grid:{display:false}},
-        y:{ticks:{color:'#475569',font:{size:10},callback:v=>'₱'+v.toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}
-      }}
+      type: chartMode==='line' ? 'line' : 'bar',
+      data:{ labels:yearMonths.map(m=>m.lbl), datasets },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:'index', intersect:false },
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            callbacks:{
+              label:ctx=>`${ctx.dataset.label}: ₱${ctx.parsed.y.toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0})}`
+            }
+          }
+        },
+        scales:{
+          x:{ticks:{color:'#475569',font:{size:10}},grid:{display:false}},
+          y:{ticks:{color:'#475569',font:{size:10},callback:v=>{
+            if(Math.abs(v)>=1000) return '₱'+(v/1000).toFixed(0)+'k';
+            return '₱'+v.toLocaleString();
+          }},grid:{color:'rgba(255,255,255,0.04)'}}
+        }
+      }
     });
     return ()=>{ if (barChart.current) barChart.current.destroy(); };
-  }, [JSON.stringify(yearMonths)]);
+  }, [JSON.stringify(yearMonths), chartMode, JSON.stringify(chartFilters)]);
 
   // ── Donut chart: only mE — paid bills already added to expenses by handlePay ──
   const catTotals = useMemo(()=>{
@@ -1608,20 +1661,73 @@ function HomeScreen({ data, onGoToPlanner }) {
       );
     })(),
     e('div',{className:'yearly-card'},
-      e('div',{className:'yearly-title'},e('span',null,'📊'),` ${now.getFullYear()} Yearly Overview`),
+      // ── Header row ──
+      e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}},
+        e('div',{className:'yearly-title',style:{marginBottom:0}},
+          e('span',null,'📊'),` ${chartRange==='last6'?'Last 6 Months':now.getFullYear()+' Overview'}`
+        ),
+        // Bar / Line toggle
+        e('div',{style:{display:'flex',gap:4,background:'var(--s2)',borderRadius:8,padding:3}},
+          e('button',{
+            onClick:()=>setChartMode('bar'),
+            style:{padding:'4px 10px',borderRadius:6,border:'none',fontSize:11,fontWeight:700,cursor:'pointer',
+              background:chartMode==='bar'?'var(--s3)':'transparent',
+              color:chartMode==='bar'?'var(--t1)':'var(--t3)',transition:'all .15s'}
+          },'▊ Bar'),
+          e('button',{
+            onClick:()=>setChartMode('line'),
+            style:{padding:'4px 10px',borderRadius:6,border:'none',fontSize:11,fontWeight:700,cursor:'pointer',
+              background:chartMode==='line'?'var(--s3)':'transparent',
+              color:chartMode==='line'?'var(--t1)':'var(--t3)',transition:'all .15s'}
+          },'∿ Line')
+        )
+      ),
+      // ── Range selector ──
+      e('div',{style:{display:'flex',gap:6,marginBottom:10}},
+        e('button',{
+          onClick:()=>setChartRange('year'),
+          style:{flex:1,padding:'7px 0',borderRadius:20,border:'1px solid '+(chartRange==='year'?'rgba(110,231,183,.5)':'var(--bdr)'),
+            background:chartRange==='year'?'rgba(110,231,183,.12)':'var(--s2)',
+            color:chartRange==='year'?'var(--acc)':'var(--t2)',
+            fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",transition:'all .15s'}
+        },'🗓️ This Year'),
+        e('button',{
+          onClick:()=>setChartRange('last6'),
+          style:{flex:1,padding:'7px 0',borderRadius:20,border:'1px solid '+(chartRange==='last6'?'rgba(56,189,248,.5)':'var(--bdr)'),
+            background:chartRange==='last6'?'rgba(56,189,248,.12)':'var(--s2)',
+            color:chartRange==='last6'?'var(--acc2)':'var(--t2)',
+            fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",transition:'all .15s'}
+        },'📈 Last 6 Months')
+      ),
+      // ── Filter toggles ──
+      e('div',{style:{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}},
+        [
+          {key:'income',label:'Income',   color:'#6ee7b7'},
+          {key:'spent', label:'Spent',    color:'#f87171'},
+          {key:'planned',label:'Planned', color:'#fbbf24'},
+          {key:'net',   label:'Net',      color:'#a78bfa'},
+        ].map(({key,label,color})=>
+          e('button',{key,onClick:()=>toggleFilter(key),
+            style:{display:'flex',alignItems:'center',gap:5,
+              padding:'5px 11px',borderRadius:20,border:'1px solid '+(chartFilters[key]?color+'55':'var(--bdr)'),
+              background:chartFilters[key]?color+'18':'transparent',
+              color:chartFilters[key]?color:'var(--t3)',
+              fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",
+              transition:'all .15s',opacity:chartFilters[key]?1:0.5}
+          },
+            e('div',{style:{width:8,height:8,borderRadius:2,background:chartFilters[key]?color:'var(--s3)',flexShrink:0}}),
+            label
+          )
+        )
+      ),
+      // ── Summary stats ──
       e('div',{className:'yearly-stats'},
         e('div',{className:'yearly-stat'}, e('div',{className:'yearly-stat-lbl'},'Total Income'),   e('div',{className:'yearly-stat-val inc'},fmt(yI))),
         e('div',{className:'yearly-stat'}, e('div',{className:'yearly-stat-lbl'},'Total Spent'),    e('div',{className:'yearly-stat-val exp'},fmt(yE))),
         e('div',{className:'yearly-stat'}, e('div',{className:'yearly-stat-lbl'},'Net Saved'),      e('div',{className:'yearly-stat-val',style:{color:yN>=0?'var(--acc)':'var(--red)'}},fmt(yN)))
       ),
-      e('div',{className:'ch'},e('canvas',{ref:barRef})),
-      e('div',{style:{display:'flex',gap:12,marginTop:8,justifyContent:'center'}},
-        [['Income','#6ee7b7'],['Spent','#f87171'],['Planned','#fbbf24']].map(([l,c])=>
-          e('div',{key:l,style:{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#94a3b8'}},
-            e('div',{style:{width:8,height:8,borderRadius:2,background:c}}),l
-          )
-        )
-      )
+      // ── Chart canvas ──
+      e('div',{className:'ch'},e('canvas',{ref:barRef}))
     )
   );
 }
@@ -1631,7 +1737,7 @@ function PlannerScreen({ data, onDelete, onSave }) {
   const { planned, expenses } = data;
   const now = new Date();
 
-  const [viewMode, setViewMode] = useState('current');
+  const [viewMode, setViewMode] = useState('period');
   const [rangeMonth, setRangeMonth] = useState(()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); });
 
   const [sY, sM] = viewMode==='range'
@@ -1925,9 +2031,9 @@ function GoalsScreen({ data, onAddGoal, onDelete, onContribute }) {
             style:{marginBottom:0}
           })
         ),
-        e('div',{className:'modal-desc'},`Adding to "${contrib.name}". This will be recorded on ${cDate===today()?'today':fmtD(cDate)} and deducted from your balance.`),
+        e('div',{className:'modal-desc'},`Adding to "${contrib.name}". Your available balance will not be affected — this only tracks your goal progress.`),
         e('input',{className:'inp',type:'number',placeholder:'Amount (₱)',value:cAmt,onChange:ev=>setCAmt(ev.target.value),inputMode:'decimal',autoFocus:!showDatePicker,style:{marginBottom:14}}),
-        e('button',{className:'btn',style:{marginBottom:8},onClick:doContrib},'Save & Deduct from Balance'),
+        e('button',{className:'btn',style:{marginBottom:8},onClick:doContrib},'Add to Goal'),
         e('button',{className:'btn btn-ghost',onClick:()=>{setContrib(null);setCDate(today());setShowDatePicker(false);}},'Cancel')
       )
     )
@@ -2264,6 +2370,73 @@ function ManageTxDrawer({ data, onClose, onDeleteSome, onDeleteOne, onDeleteAll,
   );
 }
 
+// ── QUICK CALCULATOR ─────────────────────────────────────────────
+function QuickCalculator() {
+  const [expr,  setExpr]  = useState('');
+  const [result,setResult]= useState('');
+  const [err,   setErr]   = useState(false);
+
+  const press = val => {
+    setErr(false);
+    if (val === 'C')   { setExpr(''); setResult(''); return; }
+    if (val === '⌫')   { setExpr(p=>p.slice(0,-1)); setResult(''); return; }
+    if (val === '=') {
+      try {
+        // Safe eval: only allow numbers and operators
+        const safe = expr.replace(/[^0-9+\-*/.()%]/g,'');
+        if (!safe) return;
+        // Replace % with /100 for percentage
+        const calc = safe.replace(/(\d+)%/g,'($1/100)');
+        // eslint-disable-next-line no-new-func
+        const r = new Function('return '+calc)();
+        if (!isFinite(r)) throw new Error();
+        const fmt = Number.isInteger(r)?r.toString():parseFloat(r.toFixed(8)).toString();
+        setResult(fmt);
+      } catch { setErr(true); setResult('Error'); }
+      return;
+    }
+    setExpr(p=>p+val);
+  };
+
+  const btns = [
+    ['C','⌫','%','/'],
+    ['7','8','9','*'],
+    ['4','5','6','-'],
+    ['1','2','3','+'],
+    ['0','.','','='],
+  ];
+
+  const btnStyle = (v) => ({
+    padding:'14px 0',borderRadius:12,fontSize:16,fontWeight:600,cursor:'pointer',
+    border:'1px solid var(--bdr)',
+    background: v==='='?'var(--acc)':['C','⌫'].includes(v)?'rgba(248,113,113,.12)':['/','+','-','*','%'].includes(v)?'rgba(56,189,248,.1)':'var(--s2)',
+    color: v==='='?'#0a0f1e':['C','⌫'].includes(v)?'var(--red)':['/','+','-','*','%'].includes(v)?'var(--acc2)':'var(--t1)',
+    fontFamily:"'DM Sans',sans-serif",
+    transition:'opacity .1s',
+    minWidth:0,width:'100%'
+  });
+
+  return e('div',{className:'card card-sm',style:{marginBottom:12}},
+    // Display
+    e('div',{style:{
+      background:'var(--bg)',border:'1px solid var(--bdr)',borderRadius:12,
+      padding:'12px 16px',marginBottom:12,minHeight:70,
+      display:'flex',flexDirection:'column',alignItems:'flex-end',justifyContent:'flex-end'
+    }},
+      e('div',{style:{fontSize:13,color:'var(--t3)',minHeight:18,wordBreak:'break-all',textAlign:'right'}},expr||'0'),
+      e('div',{style:{fontSize:26,fontFamily:'Syne,sans-serif',fontWeight:700,color:err?'var(--red)':'var(--acc)',lineHeight:1.1}},result||'')
+    ),
+    // Buttons
+    e('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}},
+      btns.flat().map((v,i)=>
+        v===''
+          ? e('div',{key:i})
+          : e('button',{key:i, onClick:()=>press(v), style:btnStyle(v)},v)
+      )
+    )
+  );
+}
+
 // ── PROFILE SCREEN ────────────────────────────────────────────────
 function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
   const [theme, setTheme_] = useState(()=>pref.get('theme')||'dark');
@@ -2479,6 +2652,29 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
         )
       )
     ),
+    // Calculator
+    e('div',{className:'slbl'},'Calculator'),
+    e('div',{className:'card card-sm',style:{marginBottom:12}},
+      e('div',{className:'mi',onClick:()=>setFlow('calc')},
+        e('div',{className:'mi-ico',style:{background:'rgba(251,191,36,.12)'}},
+          e('svg',{width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'var(--acc4)',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+            e('rect',{x:4,y:2,width:16,height:20,rx:2}),
+            e('line',{x1:8,y1:7,x2:16,y2:7}),
+            e('line',{x1:8,y1:11,x2:8,y2:11}),e('circle',{cx:8,cy:11,r:.5,fill:'var(--acc4)'}),
+            e('line',{x1:12,y1:11,x2:12,y2:11}),e('circle',{cx:12,cy:11,r:.5,fill:'var(--acc4)'}),
+            e('line',{x1:16,y1:11,x2:16,y2:11}),e('circle',{cx:16,cy:11,r:.5,fill:'var(--acc4)'}),
+            e('line',{x1:8,y1:15,x2:8,y2:15}),e('circle',{cx:8,cy:15,r:.5,fill:'var(--acc4)'}),
+            e('line',{x1:12,y1:15,x2:12,y2:15}),e('circle',{cx:12,cy:15,r:.5,fill:'var(--acc4)'}),
+            e('line',{x1:16,y1:15,x2:16,y2:19})
+          )
+        ),
+        e('div',{className:'mi-info'},
+          e('div',{className:'mi-lbl'},'Calculator'),
+          e('div',{className:'mi-sub'},'Basic calculator for quick math')
+        ),
+        e('span',{className:'mi-arr'},'›')
+      )
+    ),
     // Data Management
     e('div',{className:'slbl'},'Data Management'),
     e('div',{className:'card card-sm',style:{marginBottom:12}},
@@ -2576,6 +2772,17 @@ function ProfileScreen({ data, onUpdate, onClearTx, onResetAll, onSignOut }) {
           e('button',{className:'drw-cancel',onClick:()=>setFlow(null)},'✕ Close')
         ),
         e(LogScreen,{data, onDelete:()=>{}})
+      )
+    ),
+    // Calculator drawer
+    flow==='calc' && e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&setFlow(null)},
+      e('div',{className:'drw',style:{paddingBottom:32,maxHeight:'90vh'}},
+        e('div',{className:'hdl'}),
+        e('div',{className:'drw-head'},
+          e('div',{className:'drw-title'},'Calculator'),
+          e('button',{className:'drw-cancel',onClick:()=>setFlow(null)},'✕ Close')
+        ),
+        e(QuickCalculator)
       )
     )
   );
@@ -2881,8 +3088,124 @@ const IC = {
               e('line',{x1:2,y1:10,x2:22,y2:10}),
               e('line',{x1:6,y1:15,x2:10,y2:15}),
               e('line',{x1:14,y1:15,x2:16,y2:15})
+           ),
+  cal:     e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+              e('rect',{x:3,y:4,width:18,height:18,rx:2}),
+              e('line',{x1:16,y1:2,x2:16,y2:6}),
+              e('line',{x1:8,y1:2,x2:8,y2:6}),
+              e('line',{x1:3,y1:10,x2:21,y2:10})
            )
 };
+
+// ── CALENDAR MODAL ────────────────────────────────────────────────
+function CalendarModal({ data, onClose }) {
+  const now = new Date();
+  const [viewYear,  setViewYear]  = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Build event map: date string -> list of items
+  const evMap = {};
+  const addEv = (dateStr, type, label, color) => {
+    if (!dateStr) return;
+    evMap[dateStr] = evMap[dateStr]||[];
+    evMap[dateStr].push({type,label,color});
+  };
+  (data.planned||[]).forEach(p => addEv(p.due_date,'bill',p.name,'var(--acc2)'));
+  (data.debts||[]).forEach(d => {
+    if (d.remaining>0) {
+      const day = d.due_day||1;
+      const ds = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      addEv(ds,'debt',d.name,'var(--red)');
+    }
+  });
+  (data.paydays||[]).forEach(day => {
+    const ds = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    addEv(ds,'payday','Payday','var(--acc)');
+  });
+
+  const [selDay, setSelDay] = useState(null);
+  const selKey = selDay ? `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(selDay).padStart(2,'0')}` : null;
+  const selEvs = selKey ? (evMap[selKey]||[]) : [];
+
+  const prevMonth = () => { if(viewMonth===0){setViewMonth(11);setViewYear(y=>y-1);}else setViewMonth(m=>m-1); setSelDay(null); };
+  const nextMonth = () => { if(viewMonth===11){setViewMonth(0);setViewYear(y=>y+1);}else setViewMonth(m=>m+1); setSelDay(null); };
+
+  const cells = [];
+  for(let i=0;i<firstDay;i++) cells.push(null);
+  for(let d=1;d<=daysInMonth;d++) cells.push(d);
+
+  const isToday = d => d===now.getDate()&&viewMonth===now.getMonth()&&viewYear===now.getFullYear();
+  const dayKey  = d => `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  return e('div',{className:'ov',onClick:ev=>ev.target.className==='ov'&&onClose()},
+    e('div',{className:'drw',style:{paddingBottom:32,maxHeight:'92vh'}},
+      e('div',{className:'hdl'}),
+      e('div',{className:'drw-head'},
+        e('div',{className:'drw-title'},'Calendar'),
+        e('button',{className:'drw-cancel',onClick:onClose},'✕ Close')
+      ),
+      // Nav
+      e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
+        e('button',{onClick:prevMonth,style:{background:'var(--s2)',border:'1px solid var(--bdr)',borderRadius:8,width:34,height:34,cursor:'pointer',color:'var(--t1)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}},'‹'),
+        e('div',{style:{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:16,color:'var(--t1)'}},monthNames[viewMonth],' ',viewYear),
+        e('button',{onClick:nextMonth,style:{background:'var(--s2)',border:'1px solid var(--bdr)',borderRadius:8,width:34,height:34,cursor:'pointer',color:'var(--t1)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}},'›')
+      ),
+      // Day headers
+      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}},
+        dayNames.map(d=>e('div',{key:d,style:{textAlign:'center',fontSize:10,fontWeight:700,color:'var(--t3)',padding:'4px 0'}},d))
+      ),
+      // Grid
+      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}},
+        cells.map((d,i)=>{
+          if(!d) return e('div',{key:'e'+i});
+          const key = dayKey(d);
+          const evs = evMap[key]||[];
+          const today = isToday(d);
+          const sel   = selDay===d;
+          return e('div',{key:d,
+            onClick:()=>setSelDay(sel?null:d),
+            style:{
+              minHeight:40,borderRadius:8,padding:'4px 2px',cursor:'pointer',
+              textAlign:'center',position:'relative',
+              background: sel?'rgba(110,231,183,.15)':today?'rgba(110,231,183,.08)':'transparent',
+              border: sel?'1px solid var(--acc)':today?'1px solid rgba(110,231,183,.3)':'1px solid transparent',
+              transition:'all .15s'
+            }
+          },
+            e('div',{style:{fontSize:13,fontWeight:today?800:500,color:today?'var(--acc)':'var(--t1)',marginBottom:2}},d),
+            evs.length>0 && e('div',{style:{display:'flex',flexWrap:'wrap',gap:2,justifyContent:'center'}},
+              evs.slice(0,3).map((ev,ei)=>e('div',{key:ei,style:{width:6,height:6,borderRadius:'50%',background:ev.color}}))
+            )
+          );
+        })
+      ),
+      // Selected day events
+      selDay && e('div',{style:{marginTop:16,background:'var(--s2)',border:'1px solid var(--bdr)',borderRadius:12,padding:14}},
+        e('div',{style:{fontWeight:700,fontSize:13,color:'var(--t1)',marginBottom:8}},monthNames[viewMonth]+' '+selDay),
+        selEvs.length===0
+          ? e('div',{style:{fontSize:13,color:'var(--t3)'}}, 'Nothing scheduled.')
+          : selEvs.map((ev,i)=>e('div',{key:i,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:i<selEvs.length-1?'1px solid var(--bdr)':'none'}},
+              e('div',{style:{width:8,height:8,borderRadius:'50%',background:ev.color,flexShrink:0}}),
+              e('div',{style:{fontSize:13,color:'var(--t1)'}},ev.label),
+              e('div',{style:{marginLeft:'auto',fontSize:11,color:'var(--t3)',textTransform:'uppercase',letterSpacing:.5}},ev.type)
+            ))
+      ),
+      // Legend
+      e('div',{style:{display:'flex',gap:14,marginTop:14,flexWrap:'wrap'}},
+        [{color:'var(--acc)',label:'Payday'},{color:'var(--acc2)',label:'Bill due'},{color:'var(--red)',label:'Debt'}].map(l=>
+          e('div',{key:l.label,style:{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--t3)'}},
+            e('div',{style:{width:8,height:8,borderRadius:'50%',background:l.color}}), l.label
+          )
+        )
+      )
+    )
+  );
+}
 
 // ── ROOT APP ──────────────────────────────────────────────────────
 function App() {
@@ -2894,6 +3217,7 @@ function App() {
   const [showSignOut, setShowSignOut] = useState(false);
   const [showExitPrompt, setShowExitPrompt] = useState(false);
   const [showVynelle, setShowVynelle] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const exitTapRef = useRef(null);
 
   // Push a history entry once on mount so back button can be intercepted
@@ -2976,15 +3300,10 @@ function App() {
     save({...data, [key]:(data[key]||[]).filter(x=>x.id!==id)});
   };
   const handleContrib = (goalId, amt, goalName, contribDate) => {
-    const savingsExpense = {
-      id: uid(), amount: amt,
-      note: `Savings — ${goalName||'Goal'}`,
-      category: 'Savings', date: contribDate||today(), created_at: new Date().toISOString()
-    };
+    // Only update the goal's saved amount — do NOT add an expense so balance is unaffected
     save({
       ...data,
       goals: data.goals.map(g=>g.id===goalId?{...g,current_amount:(g.current_amount||0)+amt}:g),
-      expenses: [savingsExpense,...(data.expenses||[])]
     });
   };
   const handleAddDebt = debt => {
@@ -3067,6 +3386,20 @@ function App() {
             border:'2px solid var(--bg)'
           }},data.debts.filter(d=>d.remaining>0).length)
         ),
+        e('button',{
+          onClick:()=>setShowCalendar(true),
+          title:'Calendar',
+          style:{
+            width:36,height:36,borderRadius:10,
+            background:'rgba(56,189,248,.1)',
+            border:'1px solid rgba(56,189,248,.2)',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            color:'var(--acc2)',
+            cursor:'pointer',flexShrink:0,transition:'all .2s',padding:0,
+          }
+        },
+          e('div',{style:{width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center'}},IC.cal)
+        ),
         e('div',{className:'topbar-logo'},'My',e('span',null,'Budget'))
       ),
       e('div',{className:'topbar-avatar',onClick:()=>setTab('profile')},
@@ -3087,6 +3420,7 @@ function App() {
     ),
     e('button',{className:'nadd',onClick:()=>setShowAdd(true)},IC.plus),
     showVynelle && e(VynelleChat,{data, onClose:()=>setShowVynelle(false)}),
+    showCalendar && e(CalendarModal,{data, onClose:()=>setShowCalendar(false)}),
     showAdd && e(AddDrawer,{onClose:()=>setShowAdd(false), onSave:handleSave}),
     showSignOut && e('div',{className:'ov-center'},
       e('div',{className:'modal'},
