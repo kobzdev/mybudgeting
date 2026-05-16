@@ -3127,6 +3127,9 @@ function CalendarModal({ data, onClose }) {
     const ds = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     addEv(ds,'payday','Payday','var(--acc)');
   });
+  (data.expenses||[]).forEach(x => {
+    if (x.date) addEv(x.date,'expense',x.note||x.category||'Expense','rgba(251,191,36,0.9)');
+  });
 
   const [selDay, setSelDay] = useState(null);
   const selKey = selDay ? `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(selDay).padStart(2,'0')}` : null;
@@ -3197,7 +3200,7 @@ function CalendarModal({ data, onClose }) {
       ),
       // Legend
       e('div',{style:{display:'flex',gap:14,marginTop:14,flexWrap:'wrap'}},
-        [{color:'var(--acc)',label:'Payday'},{color:'var(--acc2)',label:'Bill due'},{color:'var(--red)',label:'Debt'}].map(l=>
+        [{color:'var(--acc)',label:'Payday'},{color:'var(--acc2)',label:'Bill due'},{color:'var(--red)',label:'Debt'},{color:'rgba(251,191,36,0.9)',label:'Expense'}].map(l=>
           e('div',{key:l.label,style:{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--t3)'}},
             e('div',{style:{width:8,height:8,borderRadius:'50%',background:l.color}}), l.label
           )
