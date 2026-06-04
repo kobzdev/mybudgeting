@@ -603,6 +603,7 @@ select.inp{appearance:none}
 .vyn-dot:nth-child(2){animation-delay:.15s}
 .vyn-dot:nth-child(3){animation-delay:.3s}
 @keyframes vbounce{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(-5px);opacity:1}}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 3px rgba(110,231,183,.35)}50%{box-shadow:0 0 0 8px rgba(110,231,183,.1)}}
 .vyn-quick{display:flex;flex-wrap:wrap;gap:7px;padding:10px 16px 6px;flex-shrink:0}
 .vyn-qbtn{padding:7px 13px;border-radius:20px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.1);color:#a78bfa;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
 .vyn-qbtn:active{background:rgba(167,139,250,.25)}
@@ -2959,7 +2960,86 @@ function vynelleReply(input, data) {
   return `I'm not sure about that, but I can help with: **${suggestions.slice(0,4).join(', ')}**, and more.\n\nTry asking: *"What's my balance?"* or *"Give me budget tips."*`;
 }
 
-function VynelleChat({ data, onClose }) {
+// ── VOICE ACTION PARSER ───────────────────────────────────────────
+function parseVoiceAction(text, data) {
+  const q = text.toLowerCase().trim();
+  const fmtP = n => '₱'+new Intl.NumberFormat('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+
+  // Extract amount — supports "300", "300 pesos", "three hundred"
+  const wordNums = {'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,
+    'twenty':20,'thirty':30,'forty':40,'fifty':50,'sixty':60,'seventy':70,'eighty':80,'ninety':90,
+    'hundred':100,'thousand':1000,'five hundred':500,'one thousand':1000,'two thousand':2000,
+    'three thousand':3000,'five thousand':5000,'ten thousand':10000};
+  let amount = 0;
+  const amtMatch = q.match(/(?:php|₱|pesos?|peso)?\s*(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s*(?:php|₱|pesos?|peso)/i);
+  if (amtMatch) {
+    amount = parseFloat((amtMatch[1]||amtMatch[2]).replace(/,/g,''));
+  } else {
+    for (const [word, val] of Object.entries(wordNums)) {
+      if (q.includes(word)) { amount = val; break; }
+    }
+  }
+
+  // Category detection for expenses
+  const catMap = {
+    'Food':['food','kain','eat','restaurant','lunch','dinner','breakfast','groceries','grocery','snack','merienda','jollibee','mcdo','fast food','milk tea','coffee'],
+    'Transport':['transport','fare','taxi','grab','bus','jeep','jeepney','tricycle','gas','gasoline','fuel','commute','ride','uber'],
+    'Bills':['bill','bills','electric','electricity','meralco','water','internet','wifi','subscription','netflix','spotify','load','mobile load'],
+    'Health':['medicine','medicine','health','doctor','hospital','checkup','pharmacy','medic','drug'],
+    'Shopping':['shopping','clothes','shoes','shirt','buy','bought','mall','online shop','lazada','shopee'],
+    'Entertainment':['entertainment','movie','game','fun','play','leisure','concert'],
+    'Savings':['savings','save','ipon','piggy'],
+    'Other':[]
+  };
+  let detectedCat = 'Other';
+  for (const [cat, keywords] of Object.entries(catMap)) {
+    if (keywords.some(k=>q.includes(k))) { detectedCat = cat; break; }
+  }
+
+  // Detect note/label after "for", "on", "about", "labeled", "called", "named"
+  const noteMatch = q.match(/(?:for|on|about|labeled?|called|named)\s+([a-z\s]+?)(?:\s+(?:today|yesterday|costing?|worth|amount|cost|pesos?|php|\d).*)?$/i);
+  const note = noteMatch ? noteMatch[1].trim() : '';
+
+  // ── ADD EXPENSE ──
+  if (/add(?:ing)?.*expense|(?:spent|spend|gastos|nagbayad|nabayad|bought|used|cost)/.test(q) && amount > 0) {
+    const item = { id:uid(), amount, category:detectedCat, note:note||detectedCat, date:today(), created_at:new Date().toISOString() };
+    return { action:'add_expense', item, msg:`✅ Got it! Added **${fmtP(amount)}** expense for **${note||detectedCat}** (${detectedCat}) to your records.` };
+  }
+
+  // ── ADD INCOME ──
+  if (/add(?:ing)?.*income|(?:received?|earned?|sweldo|salary|kumita|naka(?:kuha|receive)|deposited?)/.test(q) && amount > 0) {
+    const srcMatch = q.match(/(?:from|source|via|for)\s+([a-z\s]+?)(?:\s+(?:today|amount|pesos?|php|\d).*)?$/i);
+    const src = srcMatch ? srcMatch[1].trim() : 'Income';
+    const item = { id:uid(), amount, source:src, date:today(), created_at:new Date().toISOString() };
+    return { action:'add_income', item, msg:`✅ Added income of **${fmtP(amount)}** from **${src}** to your records.` };
+  }
+
+  // ── ADD BILL (PLANNED) ──
+  if (/add(?:ing)?.*bill|(?:bill|bayarin|due|subscription|rent|utility|recurring)/.test(q) && amount > 0) {
+    const nameMatch = q.match(/(?:bill(?:s)?|bayarin|for|named?|called?)\s+([a-z\s]+?)(?:\s+(?:amount|of|worth|pesos?|php|\d|due|every|monthly).*)?$/i);
+    const billName = nameMatch ? nameMatch[1].trim() : note||'Bill';
+    const dueMatch = q.match(/due\s+(?:on\s+)?(?:the\s+)?(\d+)/i);
+    const dueDay = dueMatch ? parseInt(dueMatch[1]) : new Date().getDate();
+    const dueDate = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(dueDay).padStart(2,'0')}`;
+    const item = { id:uid(), name:billName, amount, due_date:dueDate, paid:false, created_at:new Date().toISOString() };
+    return { action:'add_bill', item, msg:`✅ Added bill **${billName}** for **${fmtP(amount)}** due on day ${dueDay} to your Planner.` };
+  }
+
+  // ── ADD GOAL ──
+  if (/add(?:ing)?.*goal|(?:goal|target|saving for|ipon para sa|dream|new goal)/.test(q) && amount > 0) {
+    const goalMatch = q.match(/(?:goal|saving(?:s)? for|ipon para sa|for|called?|named?|to (?:buy|get|save))\s+([a-z\s]+?)(?:\s+(?:worth|costing?|of|amount|pesos?|php|\d).*)?$/i);
+    const goalName = goalMatch ? goalMatch[1].trim() : note||'My Goal';
+    const icons = {'travel':'✈️','phone':'📱','laptop':'💻','car':'🚗','food':'🍔','bag':'👜','house':'🏠','emergency':'🆘'};
+    let icon = '🎯';
+    for (const [k,v] of Object.entries(icons)) { if (goalName.includes(k)||q.includes(k)) { icon=v; break; } }
+    const item = { id:uid(), name:goalName, icon, target_amount:amount, current_amount:0, created_at:new Date().toISOString() };
+    return { action:'add_goal', item, msg:`✅ Created goal **${icon} ${goalName}** with target of **${fmtP(amount)}**. Let's start saving!` };
+  }
+
+  return null; // not an action
+}
+
+function VynelleChat({ data, onClose, onUpdate }) {
   const name = pref.get('display_name')||'';
   const STORAGE_KEY = 'vynelle_chat_history';
 
@@ -2977,10 +3057,29 @@ function VynelleChat({ data, onClose }) {
   });
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [micError, setMicError] = useState('');
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(()=>{ endRef.current?.scrollIntoView({behavior:'smooth'}); },[msgs, typing]);
+
+  // Stop recognition on unmount
+  useEffect(()=>()=>{ try{ recognitionRef.current&&recognitionRef.current.stop(); }catch{} },[]);
+
+  const applyAction = (parsed) => {
+    if (!onUpdate) return;
+    if (parsed.action==='add_expense') {
+      onUpdate({ expenses:[parsed.item,...(data.expenses||[])] });
+    } else if (parsed.action==='add_income') {
+      onUpdate({ income:[parsed.item,...(data.income||[])] });
+    } else if (parsed.action==='add_bill') {
+      onUpdate({ planned:[parsed.item,...(data.planned||[])] });
+    } else if (parsed.action==='add_goal') {
+      onUpdate({ goals:[parsed.item,...(data.goals||[])] });
+    }
+  };
 
   const send = txt => {
     const text = (txt||input).trim();
@@ -2991,13 +3090,53 @@ function VynelleChat({ data, onClose }) {
     setInput('');
     setTyping(true);
     setTimeout(()=>{
-      const reply = vynelleReply(text, data);
+      // Check if it's an action command first
+      const parsed = parseVoiceAction(text, data);
+      let reply;
+      if (parsed) {
+        applyAction(parsed);
+        reply = parsed.msg;
+      } else {
+        reply = vynelleReply(text, data);
+      }
       const botMsg = { id:uid(), role:'bot', text:reply, ts:Date.now() };
       const final = [...next, botMsg];
       setMsgs(final);
       saveHistory(final);
       setTyping(false);
     }, 600 + Math.random()*400);
+  };
+
+  const startListening = () => {
+    setMicError('');
+    const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+    if (!SR) { setMicError('Voice not supported on this browser.'); return; }
+    const r = new SR();
+    r.lang = 'en-PH';
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    recognitionRef.current = r;
+    setListening(true);
+    r.onresult = ev => {
+      const transcript = ev.results[0][0].transcript;
+      setInput(transcript);
+      setListening(false);
+      // Auto-send after short delay so user sees the transcript
+      setTimeout(()=>send(transcript), 400);
+    };
+    r.onerror = ev => {
+      setListening(false);
+      if (ev.error==='not-allowed') setMicError('Mic permission denied. Allow mic in browser settings.');
+      else if (ev.error==='no-speech') setMicError('No speech detected. Try again.');
+      else setMicError('Voice error: '+ev.error);
+    };
+    r.onend = ()=>setListening(false);
+    r.start();
+  };
+
+  const stopListening = () => {
+    try{ recognitionRef.current&&recognitionRef.current.stop(); }catch{}
+    setListening(false);
   };
 
   const clearHistory = () => {
@@ -3007,7 +3146,6 @@ function VynelleChat({ data, onClose }) {
   };
 
   const renderText = txt => {
-    // Bold markdown and newlines
     const parts = txt.split('\n');
     return parts.map((line,i)=>{
       const segs = line.split(/(\*\*[^*]+\*\*)/g);
@@ -3030,7 +3168,7 @@ function VynelleChat({ data, onClose }) {
         e('div',{className:'vyn-avatar'},'🌸'),
         e('div',{className:'vyn-headinfo'},
           e('div',{className:'vyn-name'},'Vynelle'),
-          e('div',{className:'vyn-status'},'Online • Offline AI')
+          e('div',{className:'vyn-status'},listening?'🎙️ Listening…':'Online • Tap 🎙️ to speak')
         ),
         e('button',{
           onClick:clearHistory,
@@ -3054,16 +3192,49 @@ function VynelleChat({ data, onClose }) {
         ),
         e('div',{ref:endRef})
       ),
+      // Mic error
+      micError && e('div',{style:{fontSize:11,color:'var(--red)',padding:'4px 12px',textAlign:'center'}},micError),
+      // Voice hint banner (shown when listening)
+      listening && e('div',{style:{
+        margin:'0 12px 6px',padding:'10px 14px',borderRadius:12,
+        background:'rgba(110,231,183,.08)',border:'1px solid rgba(110,231,183,.2)',
+        fontSize:12,color:'var(--acc)',textAlign:'center',lineHeight:1.5
+      }},
+        e('div',{style:{fontWeight:700,marginBottom:3}},'🎙️ Speak now…'),
+        e('div',{style:{color:'var(--t3)'}},'Try: "Add food expense 300" or "Add bill Meralco 1500"')
+      ),
       // Quick replies
       e('div',{className:'vyn-quick'},
         quickReplies.map(q=>e('button',{key:q,className:'vyn-qbtn',onClick:()=>send(q)},q))
       ),
-      // Input
+      // Input row
       e('div',{className:'vyn-inputrow'},
+        // Mic button
+        e('button',{
+          onClick: listening ? stopListening : startListening,
+          title: listening ? 'Stop listening' : 'Speak to Vynelle',
+          style:{
+            flexShrink:0, width:40, height:40, borderRadius:12,
+            background: listening ? 'var(--acc)' : 'var(--s2)',
+            border: listening ? 'none' : '1px solid var(--bdr)',
+            color: listening ? '#fff' : 'var(--t2)',
+            cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+            transition:'all .2s',
+            boxShadow: listening ? '0 0 0 3px rgba(110,231,183,.35)' : 'none',
+            animation: listening ? 'micPulse 1.2s ease-in-out infinite' : 'none'
+          }
+        },
+          e('svg',{viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',width:18,height:18},
+            e('rect',{x:9,y:1,width:6,height:11,rx:3}),
+            e('path',{d:'M19 10a7 7 0 01-14 0'}),
+            e('line',{x1:12,y1:19,x2:12,y2:23}),
+            e('line',{x1:8,y1:23,x2:16,y2:23})
+          )
+        ),
         e('input',{
           ref:inputRef,
           className:'vyn-inp',
-          placeholder:'Ask Vynelle anything…',
+          placeholder: listening ? '🎙️ Listening…' : 'Ask or say "Add food expense 300"…',
           value:input,
           onChange:ev=>setInput(ev.target.value),
           onKeyDown:ev=>ev.key==='Enter'&&send()
@@ -3422,7 +3593,7 @@ function App() {
       )
     ),
     e('button',{className:'nadd',onClick:()=>setShowAdd(true)},IC.plus),
-    showVynelle && e(VynelleChat,{data, onClose:()=>setShowVynelle(false)}),
+    showVynelle && e(VynelleChat,{data, onClose:()=>setShowVynelle(false), onUpdate:handleUpdate}),
     showCalendar && e(CalendarModal,{data, onClose:()=>setShowCalendar(false)}),
     showAdd && e(AddDrawer,{onClose:()=>setShowAdd(false), onSave:handleSave}),
     showSignOut && e('div',{className:'ov-center'},
